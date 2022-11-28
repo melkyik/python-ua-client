@@ -1,6 +1,6 @@
 import logging
 import asyncio
-
+import json
 from asyncua import Client, ua, Node
 
 
@@ -12,27 +12,16 @@ class SubHandler:
     Subscription Handler. To receive events from server for a subscription
     This class is just a sample class. Whatever class having these methods can be used
     """
-
     def datachange_notification(self, node: Node, val, data):
-        """
-        called for every datachange notification from server
-        """ 
-        
-        print("ЗНАЧЕНИЕ СМЕНИЛОСЬ НА ", val)
-        
-        _logger.info("datachange_notification %r %s", node, val)
-
+         # called for every datachange notification from server
+        print("id",node.nodeid.Identifier, val)
+        #_logger.info("datachange_notification %r %s", node, val)
     def event_notification(self, event: ua.EventNotificationList):
-        """
-        called for every event notification from server
-        """
+       #called for every event notification from server
         pass
-
     def status_change_notification(self, status: ua.StatusChangeNotification):
-        """
-        called for every status change notification from server
-        """
-        _logger.info("status_notification %s", status)
+        #called for every status change notification from server
+       pass #_logger.info("status_notification %s", status)
 
 async def main():
     handler = SubHandler()
@@ -58,10 +47,10 @@ async def main():
         # nodes_to_read = [Node(client, n) for n in nodes_to_read]
         # i=0
                 ##ниже обязательно должен быть обьявлен список подписки, в примере он из одного блока
-                node = (Node(client,'ns=4;s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.PLC_PRG.counter'),)
+                node = (Node(client,'ns=4; s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.PLC_PRG.counter'),)
                 
                 #пример простое чтение данных при запуске
-                struct = client.get_node("ns=4;s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.PLC_PRG.counter")
+                struct = client.get_node("ns=4; s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.PLC_PRG.counter")
                 var = await struct.read_value()
                 print("ЗНАЧЕНИЕ=", var)
         

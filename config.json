@@ -1,0 +1,20 @@
+{
+    "device":[
+    {
+      "id":"1",
+      "name":"PLC at stand",
+      "URL":"opc.tcp://10.10.2.244:4840",
+      "login":"admin",
+      "password":"wago",
+      "prefix":"ns=4;s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application."
+    },
+    {
+        "id":"2",
+        "name":"PLC strawbery Nsk",
+        "URL":"opc.tcp://10.10.2.30:4840",
+        "login":"admin",
+        "password":"wago1",
+        "prefix":"ns=4;s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application."
+    }
+    ]
+}

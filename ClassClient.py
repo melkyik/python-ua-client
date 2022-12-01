@@ -15,6 +15,26 @@ for k in config["device"]:
    #print(str(farms[k["id"]]))
 
 
+""" def PrintValues(farm:FarmPLC,fields:list=[]):
+        #передаем список точек для печати или напечатаем все по умолчанию
+        t=PrettyTable(["Point name","Value"])
+        if fields.count == 0:
+           for x in farm.pointsdata["Tag"]:
+                t.add_row(x, farm.getvalueshort(x))
+        else:
+            for x in fields:
+                t.add_row(x, farm.getvalueshort(x))
+        print(t) """
+
+
+
+async def printfarms():
+        for x in farms["1"].pointsdata["Tag"]:
+          print(x["address"])
+        await asyncio.sleep(3)
+
+
+
 async def main():
 
         #tasks.append(asyncio.create_task(farms["1"].loop()))
@@ -22,11 +42,12 @@ async def main():
         await asyncio.gather(
         asyncio.create_task(farms["1"].loop()),
         asyncio.create_task(farms["2"].loop())
+       # asyncio.create_task(printfarms())
         )
-        await asyncio.sleep(1)
+        #await asyncio.sleep(1)
 #logging.basicConfig(level=logging.INFO) 
 #print("\033c", end='') 
-#print (farms["1"].nodes_to_read)
+
 asyncio.run(main())
 #asyncio.run(farms["2"].loop())
 #https://stackoverflow.com/questions/31623194/asyncio-two-loops-for-different-i-o-tasks

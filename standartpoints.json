@@ -1,11 +1,4 @@
-{"Tag":[{
-"name":"test point 1",
-"address":"PLC_PRG.counter",
-"type":"real",
-"subscribe":true,
-"EU":"град",
-"val":21
-    },
+{"Tag":[
 {
 "name":"test point 2",
 "address":"GVL.AIArray.AI[1].AIData.Value",

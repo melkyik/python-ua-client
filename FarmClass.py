@@ -2,6 +2,7 @@ import json
 from asyncua import Client, ua, Node
 import logging
 import asyncio
+from prettytable import PrettyTable
 
 #_logger = logging.getLogger(__name__)
 class SubHandler:
@@ -64,12 +65,17 @@ class FarmPLC:
 
     def getvalueshort(self,short)->str: 
         #возращает значение сохраненое в основном цикле
-        return self.Value[self.retprefix+short]
+        return str(self.Value[str(self.retprefix)+short])
 
       
     def  __str__(self)->str:
         #возвращает имя и url
         return f"{self.name} {self.URL}"
+    
+  
+        
+
+
 
     async def loop(self):
         #метод для зацикливания
@@ -89,9 +95,9 @@ class FarmPLC:
                     while True:
                         await asyncio.sleep(1)
                         if self.handler.datachanged:
-                            self.value=await self.handler.Value.copy()  # передаем копию считаных данных в значения
+                            self.value=self.handler.Value.copy()  # передаем копию считаных данных в значения
                             self.handler.datachanged=False
-                          #  for n in self.value: print(self.value[n], '\n ' )
+                            #for n in self.value: print(n,self.value[n], '\n ' )
                         await self.client.check_connection()  # Throws a exception if connection is lost
             except (ConnectionError, ua.UaError):
                #_logger.warning("Reconnecting in 2 seconds")

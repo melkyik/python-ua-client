@@ -27,10 +27,9 @@ class SubHandler:
 
 
 
-
 class FarmPLC:
     Value            =  {} #сопоставление адреса и текущего значения, словарь текущих значений
-    handler = SubHandler()
+    
     #при инициализации скармливаем распакованый словарь из файла конфигурации json с нужными данными
     def __init__(self,jconf:dict={ "id":"1",
       "name":"PLC default",
@@ -43,7 +42,7 @@ class FarmPLC:
       #инициализация и заполнение первичными данными из конфигурационного файла
    
       self.jconf    =           jconf.copy()
-      print(self.jconf)
+      #print(self.jconf)
       self.prefix   =           self.jconf['prefix'] #префикс точек списка подписки
       self.retprefix   =        self.jconf['retprefix'] #префикс точек ответа подписки в ответе str(node.nodeid.Identifier)
                                                         #первые символы префикса "ns=4;s=" там отсуствуют
@@ -59,7 +58,7 @@ class FarmPLC:
       for p in self.pointsdata['Tag']:
         s=self.prefix+self.retprefix+p["address"]
         self.SubscribeNodes.append(s)
-        self.Value[self.retprefix+s] = ""
+        self.Value[self.retprefix+p["address"]] = ""
         print (self.SubscribeNodes)
    
 
@@ -72,12 +71,20 @@ class FarmPLC:
         #возвращает имя и url
         return f"{self.name} {self.URL}"
     
-  
+    def PrintValues(self,fields:list=[]):
+        #передаем список точек для печати или напечатаем все по умолчанию
+        t=PrettyTable(["Point name","Value"])
+        
+        for x in self.pointsdata["Tag"]:
+                t.add_row([x["address"], self.getvalueshort(x["address"])])
+        print(self.jconf["name"])
+        print(t) 
         
 
 
 
     async def loop(self):
+        self.handler = SubHandler()
         #метод для зацикливания
         while True:
             self.client   =   Client(url=self.URL)
@@ -86,18 +93,19 @@ class FarmPLC:
             try:
                 async with self.client:
                     self.subscription = await self.client.create_subscription(500, self.handler)
-                    nodes_to_read = [Node(self.client, n) for n in self.SubscribeNodes]
+                    self.nodes_to_read = [Node(self.client, n) for n in self.SubscribeNodes]
                    # print(self.nodes_to_read)
-                    await self.subscription.subscribe_data_change(nodes=nodes_to_read, 
+                    await self.subscription.subscribe_data_change(nodes=self.nodes_to_read, 
                     attr=ua.AttributeIds.Value, 
                     queuesize=50, )
          
                     while True:
                         await asyncio.sleep(1)
                         if self.handler.datachanged:
-                            self.value=self.handler.Value.copy()  # передаем копию считаных данных в значения
+                            self.Value=self.handler.Value.copy()  # передаем копию считаных данных в значения
                             self.handler.datachanged=False
-                            #for n in self.value: print(n,self.value[n], '\n ' )
+                            #!!эта строка ниже нужна для отображения передачи с клиентов пока не работает метод запроса
+                            #for n in self.value: print(n,self.value[n], '\n ' ) 
                         await self.client.check_connection()  # Throws a exception if connection is lost
             except (ConnectionError, ua.UaError):
                #_logger.warning("Reconnecting in 2 seconds")

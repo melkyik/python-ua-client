@@ -41,7 +41,7 @@ class FarmPLC:
       },log=False):
       #инициализация и заполнение первичными данными из конфигурационного файла
    
-      self.jconf    =           jconf
+      self.jconf    =           jconf.copy()
       print(self.jconf)
       self.prefix   =           self.jconf['prefix'] #префикс точек списка подписки
       self.retprefix   =        self.jconf['retprefix'] #префикс точек ответа подписки в ответе str(node.nodeid.Identifier)
@@ -89,9 +89,9 @@ class FarmPLC:
                     while True:
                         await asyncio.sleep(1)
                         if self.handler.datachanged:
-                            self.value=self.handler.Value.copy()  # передаем копию считаных данных в значения
+                            self.value=await self.handler.Value.copy()  # передаем копию считаных данных в значения
                             self.handler.datachanged=False
-                            for n in self.value: print(self.value[n], '\n ' )
+                          #  for n in self.value: print(self.value[n], '\n ' )
                         await self.client.check_connection()  # Throws a exception if connection is lost
             except (ConnectionError, ua.UaError):
                #_logger.warning("Reconnecting in 2 seconds")

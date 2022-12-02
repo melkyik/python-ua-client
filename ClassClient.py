@@ -21,9 +21,9 @@ async def printfarms():
             #    print(farms["1"].getvalueshort(x["address"]))
             #print(farms["1"].handler.Value)
             print("\033c", end='') 
-            farms["1"].PrintValues()
+            farms["1"].PrintValues() 
             farms["2"].PrintValues()
-            await asyncio.sleep(1)    
+            await asyncio.sleep(3)    
                 
      
 

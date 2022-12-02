@@ -1,13 +1,15 @@
 import json
 from asyncua import Client, ua, Node
 import logging
-import asyncio
+import asyncio #https://github.com/FreeOpcUa/opcua-asyncio
 from prettytable import PrettyTable
 
 #_logger = logging.getLogger(__name__)
 class SubHandler:
-    Value           =  {} #сопоставление адреса и текущего значения
-    datachanged     = False
+  
+    def __init__(self):
+        self.Value           =  {} #сопоставление адреса и текущего значения
+        self.datachanged     = False
     def datachange_notification(self, node: Node, val, data):
          # called for every datachange notification from server
         #_logger.info("datachange_notification %r %s", node, val)
@@ -28,7 +30,7 @@ class SubHandler:
 
 
 class FarmPLC:
-    Value            =  {} #сопоставление адреса и текущего значения, словарь текущих значений
+    
     
     #при инициализации скармливаем распакованый словарь из файла конфигурации json с нужными данными
     def __init__(self,jconf:dict={ "id":"1",
@@ -40,7 +42,7 @@ class FarmPLC:
       "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application."
       },log=False):
       #инициализация и заполнение первичными данными из конфигурационного файла
-   
+      self.Value            =  {} #сопоставление адреса и текущего значения, словарь текущих значений
       self.jconf    =           jconf.copy()
       #print(self.jconf)
       self.prefix   =           self.jconf['prefix'] #префикс точек списка подписки
@@ -73,28 +75,30 @@ class FarmPLC:
     
     def PrintValues(self,fields:list=[]):
         #передаем список точек для печати или напечатаем все по умолчанию
-        t=PrettyTable(["Point name","Value"])
+        self.t=PrettyTable(["Point name","Value"])
         
         for x in self.pointsdata["Tag"]:
-                t.add_row([x["address"], self.getvalueshort(x["address"])])
+                self.t.add_row([x["address"], self.getvalueshort(x["address"])])
         print(self.jconf["name"])
-        print(t) 
+        print(self.t) 
         
 
 
 
     async def loop(self):
-        self.handler = SubHandler()
+        
         #метод для зацикливания
         while True:
+            self.handler = SubHandler()
             self.client   =   Client(url=self.URL)
             self.client.set_user(self.jconf["login"])
             self.client.set_password(self.jconf["password"])
             try:
                 async with self.client:
-                    self.subscription = await self.client.create_subscription(500, self.handler)
+                    self.subscription = await self.client.create_subscription(1500, self.handler)
                     self.nodes_to_read = [Node(self.client, n) for n in self.SubscribeNodes]
                    # print(self.nodes_to_read)
+                    
                     await self.subscription.subscribe_data_change(nodes=self.nodes_to_read, 
                     attr=ua.AttributeIds.Value, 
                     queuesize=50, )

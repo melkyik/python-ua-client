@@ -6,6 +6,7 @@ from FarmClass import FarmPLC
 import asyncio
 
 farms=dict()
+c=1
 
 with open("config.json", "r") as read_file: 
         config = json.load(read_file)
@@ -16,35 +17,33 @@ for k in config["device"]:
 
 
 async def printfarms():
+         global c
          while True:
-            #for x in farms["1"].pointsdata["Tag"]:
-            #    print(farms["1"].getvalueshort(x["address"]))
-            #print(farms["1"].handler.Value)
-            print("\033c", end='') 
+            c=c+1
+            #print("\033c", end='') 
             farms["1"].PrintValues() 
             farms["2"].PrintValues()
-            await asyncio.sleep(3)    
+            #await farms["1"].WriteValueShort("GVL.AIArray.AI[0].AIData.RawOverflow",c)  
+            print(c)
+            await asyncio.sleep(1)    
                 
-     
-
-
+async def writeval():
+        global c
+           
 
 async def main():
+      
+        tasks=[]
+        for k in farms:
+                tasks.append(asyncio.create_task(farms[k].loop()))
+        tasks.append(asyncio.create_task(printfarms()))
+       # tasks.append(writeval())
+        await asyncio.gather(*tasks)
 
-        #tasks.append(asyncio.create_task(farms["1"].loop()))
-        #tasks.append(asyncio.create_task(farms["2"].loop()))
-        await asyncio.gather(
-        asyncio.create_task(farms["1"].loop()),
-        asyncio.create_task(farms["2"].loop()),
-        asyncio.create_task(printfarms())
-        )
-        #await asyncio.sleep(1)
+        
 #logging.basicConfig(level=logging.INFO) 
-#print("\033c", end='') 
 
-#asyncio.run(main())
 if __name__ == "__main__":
         asyncio.run(main())
- 
-#asyncio.run(farms["2"].loop())
+
 #https://stackoverflow.com/questions/31623194/asyncio-two-loops-for-different-i-o-tasks

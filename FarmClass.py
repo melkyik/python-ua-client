@@ -41,13 +41,14 @@ class FarmPLC:
       "prefix":"ns=4;s=",
       "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application."
       },log=False):
+      
       #инициализация и заполнение первичными данными из конфигурационного файла
       self.Value            =  {} #сопоставление адреса и текущего значения, словарь текущих значений
       self.jconf    =           jconf.copy()
       #print(self.jconf)
       self.prefix   =           self.jconf['prefix'] #префикс точек списка подписки
       self.retprefix   =        self.jconf['retprefix'] #префикс точек ответа подписки в ответе str(node.nodeid.Identifier)
-                                                        #первые символы префикса "ns=4;s=" там отсуствуют
+      self.connectionstatus =   str()#первые символы префикса "ns=4;s=" там отсуствуют
       self.name     =           self.jconf['name']  
       self.URL      =           self.jconf['URL']
       self.SubscribeNodes    =  list() #список точек для подписки, остальные опрашиваются по общему опросу
@@ -64,9 +65,25 @@ class FarmPLC:
         print (self.SubscribeNodes)
    
 
-    def getvalueshort(self,short)->str: 
+    def getValueShort(self,short)->str: 
         #возращает значение сохраненое в основном цикле
         return str(self.Value[str(self.retprefix)+short])
+
+    async def getNodeShort(self,short)->Node:
+        #возвращает обьект Node по адресу
+        return self.client.get_node(self.prefix+self.retprefix+short)
+    
+    async def WriteValueShort(self,short,val):
+        #try:
+        if self.connectionstatus == 'Connected':
+            writenode=self.client.get_node(self.prefix+self.retprefix+short)
+           # await writenode.set_writable(True)
+            dv = ua.DataValue(ua.Variant(val, ua.VariantType.Int16))
+            return await writenode.write_value(val)
+        else:
+            return None
+        #except:
+           # pass
 
       
     def  __str__(self)->str:
@@ -76,17 +93,16 @@ class FarmPLC:
     def PrintValues(self,fields:list=[]):
         #передаем список точек для печати или напечатаем все по умолчанию
         self.t=PrettyTable(["Point name","Value"])
-        
         for x in self.pointsdata["Tag"]:
-                self.t.add_row([x["address"], self.getvalueshort(x["address"])])
-        print(self.jconf["name"])
+                self.t.add_row([x["address"], self.getValueShort(x["address"])])
+        print(self.jconf["name"],self.connectionstatus)
         print(self.t) 
-        
+    
 
 
 
+    
     async def loop(self):
-        
         #метод для зацикливания
         while True:
             self.handler = SubHandler()
@@ -108,12 +124,21 @@ class FarmPLC:
                         if self.handler.datachanged:
                             self.Value=self.handler.Value.copy()  # передаем копию считаных данных в значения
                             self.handler.datachanged=False
+                            self.connectionstatus='Connected'
                             #!!эта строка ниже нужна для отображения передачи с клиентов пока не работает метод запроса
                             #for n in self.value: print(n,self.value[n], '\n ' ) 
                         await self.client.check_connection()  # Throws a exception if connection is lost
-            except (ConnectionError, ua.UaError):
+            except (ConnectionError, ua.UaError,asyncio.exceptions.TimeoutError):
                #_logger.warning("Reconnecting in 2 seconds")
+                self.connectionstatus='Timeout!'
                 await asyncio.sleep(2)
+     
+               
+    
+
+          
+
+                
 
     
 

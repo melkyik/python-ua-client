@@ -50,9 +50,12 @@ async def main():
                 node = (Node(client,'ns=4; s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.PLC_PRG.counter'),)
                 
                 #пример простое чтение данных при запуске
-                struct = client.get_node("ns=4; s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.PLC_PRG.counter")
-                var = await struct.read_value()
-                print("ЗНАЧЕНИЕ=", var)
+                struct = client.get_node("ns=4; s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.GVL.AIArray.AI[2].AIData.MaxRaw")
+                
+                dv = ua.DataValue(ua.Variant(33, ua.VariantType.UInt16))
+                s=await struct.read_data_type_as_variant_type()
+                await struct.write_value(dv)
+                print("ЗНАЧЕНИЕ=",s)
         
                 await subscription.subscribe_data_change(node)
          

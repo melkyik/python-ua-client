@@ -6,38 +6,36 @@ from FarmClass import FarmPLC
 import asyncio
 
 farms=dict()
+f=[]
 c=1
 
-with open("config.json", "r") as read_file: 
+def fr(s)->FarmPLC:
+        #транслятор указателя в тип FarmPLC для удобства кода и спелчека 
+        return farms[str(s)]
+
+with open("config.json", "r") as read_file: #читаем файл с конфигурации и делаем из него фермы
         config = json.load(read_file)
 
-for k in config["device"]:
+for k in config["device"]:      #создание экземпляров обьектов ферм
    farms[k["id"]]=FarmPLC(jconf=k)
-   #print(str(farms[k["id"]]))
 
 
-async def printfarms():
+async def printfarms(): #процедурка для вывода считаных значений и записи переменных
          global c
          while True:
             c=c+1
-            #print("\033c", end='') 
-            farms["1"].PrintValues() 
-            farms["2"].PrintValues()
-            #await farms["1"].WriteValueShort("GVL.AIArray.AI[0].AIData.RawOverflow",c)  
+            print("\033c", end='') 
+            fr(1).PrintValues() 
+            fr(2).PrintValues()
+            await fr(1).WriteValueShort("GVL.AIArray.AI[0].AIData.Value",c)  
             print(c)
             await asyncio.sleep(1)    
-                
-async def writeval():
-        global c
-           
 
 async def main():
-      
         tasks=[]
         for k in farms:
                 tasks.append(asyncio.create_task(farms[k].loop()))
         tasks.append(asyncio.create_task(printfarms()))
-       # tasks.append(writeval())
         await asyncio.gather(*tasks)
 
         

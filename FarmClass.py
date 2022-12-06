@@ -28,10 +28,20 @@ class SubHandler:
         pass
 
 
+class NodePoint: 
+    #в планах перевести точки в этот класс где будут хранится нужные параметры в том числе статус записи
+    def __init__(self,name:str,retname:str,fullname:str,uatype:ua.VariantType):
+        self.name=name
+        self.retname=retname
+        self.fullname=fullname
+    
+        pass
 
+#--------------------------------------------------------
+# класс экземпляров клиентов ферм
+#--------------------------------------------------------
 class FarmPLC:
-    
-    
+      
     #при инициализации скармливаем распакованый словарь из файла конфигурации json с нужными данными
     def __init__(self,jconf:dict={ "id":"1",
       "name":"PLC default",
@@ -62,32 +72,36 @@ class FarmPLC:
         s=self.prefix+self.retprefix+p["address"]
         self.SubscribeNodes.append(s)
         self.Value[self.retprefix+p["address"]] = ""
-        print (self.SubscribeNodes)
-   
-
+        #print (self.SubscribeNodes)
+#--------------------------------------------------------
     def getValueShort(self,short)->str: 
         #возращает значение сохраненое в основном цикле
         return str(self.Value[str(self.retprefix)+short])
-
+#--------------------------------------------------------
     async def getNodeShort(self,short)->Node:
         #возвращает обьект Node по адресу
         return self.client.get_node(self.prefix+self.retprefix+short)
-    
+#--------------------------------------------------------
     async def WriteValueShort(self,short,val):
-        #try:
-        if self.connectionstatus == 'Connected':
-            writenode=self.client.get_node(self.prefix+self.retprefix+short)
-           # await writenode.set_writable(True)
-            dv = ua.DataValue(ua.Variant(val, ua.VariantType.Int16))
-            return await writenode.write_value(val)
-        else:
-            return None
-        #except:
-           # pass
+        #производит запись значения в точку, предварительно определив ее тип для корректного преобразования типа
+        #нужно добавить ловушки для ошибок, с этим в докуменации туго
+            if self.connectionstatus == 'Connected':
+              writenode= self.client.get_node(self.prefix+self.retprefix+short)
+              t=await writenode.read_data_type_as_variant_type()
+              if type(t)==ua.VariantType:
+                dv = ua.DataValue(ua.Variant(val,t))
+                await writenode.write_value(dv)
+            
+            #работающий пример
+              #struct = client.get_node("ns=4; s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.GVL.AIArray.AI[2].AIData.MaxRaw")
+            # dv = ua.DataValue(ua.Variant(33, ua.VariantType.UInt16))
+              #s=await struct.read_data_type_as_variant_type()
+              #await struct.write_value(dv) р
+  #--------------------------------------------------------           
 
       
     def  __str__(self)->str:
-        #возвращает имя и url
+        #возвращает имя и url фермы
         return f"{self.name} {self.URL}"
     
     def PrintValues(self,fields:list=[]):
@@ -103,15 +117,15 @@ class FarmPLC:
 
     
     async def loop(self):
-        #метод для зацикливания
+        #метод для зацикливания ,
         while True:
-            self.handler = SubHandler()
-            self.client   =   Client(url=self.URL)
+            self.handler = SubHandler() #указатель на класс обработки подписки
+            self.client   =   Client(url=self.URL)  #клиент  фермы
             self.client.set_user(self.jconf["login"])
             self.client.set_password(self.jconf["password"])
-            try:
-                async with self.client:
-                    self.subscription = await self.client.create_subscription(1500, self.handler)
+            try: #ловушка от дисконектов
+                async with self.client: 
+                    self.subscription = await self.client.create_subscription(1500, self.handler) # создаем подписку с указателем на класс с методом и таймаутом 1500
                     self.nodes_to_read = [Node(self.client, n) for n in self.SubscribeNodes]
                    # print(self.nodes_to_read)
                     
@@ -119,15 +133,15 @@ class FarmPLC:
                     attr=ua.AttributeIds.Value, 
                     queuesize=50, )
          
-                    while True:
+                    while True: #цикл опроса изменения подписки 
                         await asyncio.sleep(1)
                         if self.handler.datachanged:
-                            self.Value=self.handler.Value.copy()  # передаем копию считаных данных в значения
+                            self.Value=self.handler.Value.copy()  # передаем копию считаных данных в массив значений
                             self.handler.datachanged=False
                             self.connectionstatus='Connected'
-                            #!!эта строка ниже нужна для отображения передачи с клиентов пока не работает метод запроса
+                            #!!эта строка ниже нужна для отображения передачи с клиентов для проверки если не работает метод запроса
                             #for n in self.value: print(n,self.value[n], '\n ' ) 
-                        await self.client.check_connection()  # Throws a exception if connection is lost
+                        await self.client.check_connection()  # отсюда вызывается исклюение об обрыве связи и запускается реконнект клиента 
             except (ConnectionError, ua.UaError,asyncio.exceptions.TimeoutError):
                #_logger.warning("Reconnecting in 2 seconds")
                 self.connectionstatus='Timeout!'

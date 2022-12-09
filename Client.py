@@ -1,7 +1,8 @@
 import logging
 import asyncio
 import json
-from asyncua import Client, ua, Node
+from asyncua import Client, ua, Node 
+from asyncua.common.xmlexporter import  XmlExporter
 
 
 _logger = logging.getLogger(__name__)
@@ -53,10 +54,11 @@ async def main():
                 struct = client.get_node("ns=4; s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.GVL.AIArray.AI[2].AIData.MaxRaw")
                 
                 dv = ua.DataValue(ua.Variant(33, ua.VariantType.UInt16))
-                s=await struct.read_data_type_as_variant_type()
+                s=await struct.read_display_name()
                 await struct.write_value(dv)
                 print("ЗНАЧЕНИЕ=",s)
-        
+
+             
                 await subscription.subscribe_data_change(node)
          
                 while True:

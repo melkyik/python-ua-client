@@ -10,8 +10,13 @@ f=[]
 c=1
 
 def fr(s)->FarmPLC:
+        try:
         #транслятор указателя в тип FarmPLC для удобства кода и спелчека 
-        return farms[str(s)]
+         if isinstance(farms[str(s)],FarmPLC):
+                return farms[str(s)]
+        except(KeyError):
+                return None
+
 
 with open("config.json", "r") as read_file: #читаем файл с конфигурации и делаем из него фермы
         config = json.load(read_file)
@@ -24,7 +29,7 @@ async def printfarms(): #процедурка для вывода считаны
          global c
          while True:
             c=c+1
-            print("\033c", end='') 
+            #print("\033c", end='') 
             fr(1).PrintValues() 
             fr(2).PrintValues()
             await fr(1).WriteValueShort("GVL.AIArray.AI[0].AIData.Value",c)  

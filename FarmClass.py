@@ -3,6 +3,7 @@ from asyncua import Client, ua, Node
 import logging
 import asyncio #https://github.com/FreeOpcUa/opcua-asyncio
 from prettytable import PrettyTable
+#from PointTag import PointTag
 
 #_logger = logging.getLogger(__name__)
 class SubHandler:
@@ -28,20 +29,31 @@ class SubHandler:
         pass
 
 
-class NodePoint: 
-    #в планах перевести точки в этот класс где будут хранится нужные параметры в том числе статус записи
-    def __init__(self,name:str,retname:str,fullname:str,uatype:ua.VariantType):
-        self.name=name
-        self.retname=retname
-        self.fullname=fullname
-    
-        pass
+class PointTag: 
 
+    #в планах перевести точки в этот класс где будут хранится нужные параметры в том числе статус записи
+    def __init__(self,addr:str,name:str):
+        self.addr=addr
+        self.uatype=None
+        self.oldval=None
+        self.value=None
+        self.status=None
+        self.name=name
+    
+ 
+    def __str__(self) -> str:
+        return f"{self.name if self.name else self.addr} {self.value}"
+    
+    def get_list(self)->list:
+        return self.name if self.name else self.addr, self.value       
+               
+
+        
 #--------------------------------------------------------
 # класс экземпляров клиентов ферм
 #--------------------------------------------------------
 class FarmPLC:
-      
+       
     #при инициализации скармливаем распакованый словарь из файла конфигурации json с нужными данными
     def __init__(self,jconf:dict={ "id":"1",
       "name":"PLC default",
@@ -53,12 +65,13 @@ class FarmPLC:
       },log=False):
       
       #инициализация и заполнение первичными данными из конфигурационного файла
-      self.Value            =  {} #сопоставление адреса и текущего значения, словарь текущих значений
+      self.Value               =  {} #сопоставление короткого адреса и текущего значения, словарь текущих значений
       self.jconf    =           jconf.copy()
       #print(self.jconf)
       self.prefix   =           self.jconf['prefix'] #префикс точек списка подписки
       self.retprefix   =        self.jconf['retprefix'] #префикс точек ответа подписки в ответе str(node.nodeid.Identifier)
-      self.connectionstatus =   str()#первые символы префикса "ns=4;s=" там отсуствуют
+                                                #первые символы префикса "ns=4;s=" там отсуствуют
+      self.connectionstatus =   str()
       self.name     =           self.jconf['name']  
       self.URL      =           self.jconf['URL']
       self.SubscribeNodes    =  list() #список точек для подписки, остальные опрашиваются по общему опросу
@@ -68,37 +81,79 @@ class FarmPLC:
       #загружаем стандартные точки из файла, для дополнительных надо чтото придумать... =(
       with open("standartpoints.json", "r") as read_file: 
         self.pointsdata = json.load(read_file)
-      for p in self.pointsdata['Tag']:
-        s=self.prefix+self.retprefix+p["address"]
-        self.SubscribeNodes.append(s)
-        self.Value[self.retprefix+p["address"]] = ""
+        for p in self.pointsdata['Tag']:
+            s=self.prefix+self.retprefix+p["address"]
+            self.SubscribeNodes.append(s)
+            self.Value[p["address"]] = PointTag(
+                addr=p["address"], 
+                name=p["name"],
+                 )
         #print (self.SubscribeNodes)
+#--------------------------------------------------------
+    def getTagByShort(self,s:str)->PointTag:
+        try:
+        #транслятор указателя в тип PointTag для удобства кода и спелчека 
+            if isinstance(self.Value[s],PointTag):
+                return self.Value[s]
+        except(KeyError):
+                return None
 #--------------------------------------------------------
     def getValueShort(self,short)->str: 
         #возращает значение сохраненое в основном цикле
-        return str(self.Value[str(self.retprefix)+short])
+            return self.getTagByShort(short).value
+
 #--------------------------------------------------------
-    async def getNodeShort(self,short)->Node:
+    def getPointByRetAddr(self,retaddr)->PointTag:
+        #возвразщает точку по ее RetAdr    
+            for i in self.Value:
+                if (self.retprefix+i)==retaddr:
+                    return self.Value[i]
+            return None
+#--------------------------------------------------------
+    def getNodeShort(self,short)->Node:
         #возвращает обьект Node по адресу
         return self.client.get_node(self.prefix+self.retprefix+short)
 #--------------------------------------------------------
     async def WriteValueShort(self,short,val):
-        #производит запись значения в точку, предварительно определив ее тип для корректного преобразования типа
-        #нужно добавить ловушки для ошибок, с этим в докуменации туго
-            if self.connectionstatus == 'Connected':
-              writenode= self.client.get_node(self.prefix+self.retprefix+short)
-              t=await writenode.read_data_type_as_variant_type()
-              if type(t)==ua.VariantType:
-                dv = ua.DataValue(ua.Variant(val,t))
-                await writenode.write_value(dv)
-            
-            #работающий пример
-              #struct = client.get_node("ns=4; s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.GVL.AIArray.AI[2].AIData.MaxRaw")
-            # dv = ua.DataValue(ua.Variant(33, ua.VariantType.UInt16))
-              #s=await struct.read_data_type_as_variant_type()
-              #await struct.write_value(dv) р
-  #--------------------------------------------------------           
+        #производит запись значения по адресу, предварительно определив ее тип для корректного преобразования типа
+        tag=self.getTagByShort(short)  
+        if not tag:                         #бывает надо записать точку которой нет в подписке пока пусть будет это условие. оно создаст новую точку в словаре
+            self.Value[short]=PointTag(short,short) # позже лучше это удалить
+            tag=self.Value[short]
+        if self.connectionstatus == 'Connected':
+            try:
+                await self.client.check_connection()                
+                writenode=  self.getNodeShort(short)
+                if not (type(tag.uatype)==ua.VariantType): #тип точки лучше сохранить тк он точно не будет менятся
+                    tag.uatype=await writenode.read_data_type_as_variant_type() #произведем чтение типа данных с OPC
+                if (type(tag.uatype)==ua.VariantType): #если уже записан тип в переменную - читать не обязательно
+                    dv = ua.DataValue(ua.Variant(val,tag.uatype)) #формируем значение особого типа для передачи на opc
+                    await writenode.write_value(dv)#произведем запись
+            except:
+                print("ошибка записи!", tag.uatype) 
+            else:
+                print (f"значение записано {self.getTagByShort(short).addr} {self.getTagByShort(short).oldval} -> {val}")
+                await self.updatevalue(short)
 
+  #--------------------------------------------------------           
+    async def updatevalue(self,short)->str:
+        #для обновления значения по адресу без учета подписки
+        try:
+            await self.client.check_connection()
+            node=  self.getNodeShort(short=short)
+            if not self.getTagByShort(short):                         #бывает надо обратится к точке которой нет в подписке пока пусть будет это условие. оно создаст новую точку в словаре
+               self.Value[short]=PointTag(short,short)                # позже лучше это удалить
+            if not self.getTagByShort(short).uatype: 
+                self.getTagByShort(short).uatype=await node.read_data_type_as_variant_type()
+            self.getTagByShort(short).value=await node.read_value()
+            return self.getTagByShort(short).value
+
+        except:
+            print("ошибка чтения",short)
+            return None
+        finally:
+            if (self.getTagByShort(short).value != self.getTagByShort(short).oldval) :
+                self.getTagByShort(short).oldval=self.getTagByShort(short).value
       
     def  __str__(self)->str:
         #возвращает имя и url фермы
@@ -106,11 +161,11 @@ class FarmPLC:
     
     def PrintValues(self,fields:list=[]):
         #передаем список точек для печати или напечатаем все по умолчанию
-        self.t=PrettyTable(["Point name","Value"])
-        for x in self.pointsdata["Tag"]:
-                self.t.add_row([x["address"], self.getValueShort(x["address"])])
+        t=PrettyTable(["Point name","Value"])
+        for x in self.Value:
+                t.add_row([x,self.getValueShort(x)])#)
         print(self.jconf["name"],self.connectionstatus)
-        print(self.t) 
+        print(t) 
     
 
 
@@ -136,8 +191,11 @@ class FarmPLC:
                     while True: #цикл опроса изменения подписки 
                         await asyncio.sleep(1)
                         if self.handler.datachanged:
-                            self.Value=self.handler.Value.copy()  # передаем копию считаных данных в массив значений
+                            for i in self.handler.Value:
+                               self.getPointByRetAddr(retaddr=i).value=self.handler.Value[i]
+                                  # передаем копию считаных данных в массив значений
                             self.handler.datachanged=False
+                            self.handler.Value={}
                             self.connectionstatus='Connected'
                             #!!эта строка ниже нужна для отображения передачи с клиентов для проверки если не работает метод запроса
                             #for n in self.value: print(n,self.value[n], '\n ' ) 
@@ -146,13 +204,7 @@ class FarmPLC:
                #_logger.warning("Reconnecting in 2 seconds")
                 self.connectionstatus='Timeout!'
                 await asyncio.sleep(2)
-     
-               
-    
-
           
-
-                
 
     
 
@@ -163,3 +215,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     asyncio.run(main())
     """
+
+
+
+ 

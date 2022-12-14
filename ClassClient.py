@@ -39,7 +39,7 @@ async def printfarms(): #процедурка для вывода считаны
 async def main():
         tasks=[]
         for k in farms:
-                tasks.append(asyncio.create_task(farms[k].loop()))
+                tasks.append(asyncio.create_task(fr(k).loop()))
         tasks.append(asyncio.create_task(printfarms()))
         await asyncio.gather(*tasks)
 

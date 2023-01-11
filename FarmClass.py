@@ -39,7 +39,7 @@ class PointTag:
         self.value=None
         self.status=None
         self.name=name
-    
+         
  
     def __str__(self) -> str:
         return f"{self.name if self.name else self.addr} {self.value}"
@@ -75,11 +75,17 @@ class FarmPLC:
       self.name     =           self.jconf['name']  
       self.URL      =           self.jconf['URL']
       self.SubscribeNodes    =  list() #список точек для подписки, остальные опрашиваются по общему опросу
-      #self.Nodes_To_read     =  list() #преобразованый список подписки для передачи в хендлер
-      
-    
+ 
+    def addpoint(self,addresses:list):
+        s=self.prefix+self.retprefix+addresses[0]
+        self.SubscribeNodes.append(s)
+        self.Value[addresses[0]] = PointTag(
+                addr=addresses[0], 
+                name=addresses[1]
+                 )
+    def loadpointsfromfile(self,filename):
       #загружаем стандартные точки из файла, для дополнительных надо чтото придумать... =(
-      with open("standartpoints.json", "r") as read_file: 
+      with open(filename, "r") as read_file: 
         self.pointsdata = json.load(read_file)
         for p in self.pointsdata['Tag']:
             s=self.prefix+self.retprefix+p["address"]
@@ -88,7 +94,6 @@ class FarmPLC:
                 addr=p["address"], 
                 name=p["name"],
                  )
-        #print (self.SubscribeNodes)
 #--------------------------------------------------------
     def getTagByShort(self,s:str)->PointTag:
         try:
@@ -116,11 +121,12 @@ class FarmPLC:
 #--------------------------------------------------------
     async def WriteValueShort(self,short,val):
         #производит запись значения по адресу, предварительно определив ее тип для корректного преобразования типа
-        tag=self.getTagByShort(short)  
-        if not tag:                         #бывает надо записать точку которой нет в подписке пока пусть будет это условие. оно создаст новую точку в словаре
-            self.Value[short]=PointTag(short,short) # позже лучше это удалить
-            tag=self.Value[short]
         if self.connectionstatus == 'Connected':
+            tag=self.getTagByShort(short)  
+            if not tag:                         #бывает надо записать точку которой нет в подписке пока пусть будет это условие. оно создаст новую точку в словаре
+                self.Value[short]=PointTag(short,short) # позже лучше это удалить
+                tag=self.Value[short]
+      
             try:
                 await self.client.check_connection()                
                 writenode=  self.getNodeShort(short)
@@ -163,7 +169,7 @@ class FarmPLC:
         #передаем список точек для печати или напечатаем все по умолчанию
         t=PrettyTable(["Point name","Value"])
         for x in self.Value:
-                t.add_row([x,self.getValueShort(x)])#)
+                t.add_row([self.Value[x].name,self.getValueShort(x)])#)
         print(self.jconf["name"],self.connectionstatus)
         print(t) 
     
@@ -206,7 +212,7 @@ class FarmPLC:
                 await asyncio.sleep(2)
           
 
-    
+
 
 
 """

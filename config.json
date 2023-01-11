@@ -12,7 +12,7 @@
     {
         "id":"2",
         "name":"PLC strawbery Nsk",
-        "URL":"opc.tcp://10.10.233.30:4840",
+        "URL":"opc.tcp://10.10.2.30:4840",
         "login":"admin",
         "password":"wago1",
         "prefix":"ns=4;s=",

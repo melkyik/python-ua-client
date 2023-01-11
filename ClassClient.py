@@ -23,9 +23,7 @@ with open("config.json", "r") as read_file: #читаем файл с конфи
 
 for k in config["device"]:      #создание экземпляров обьектов ферм
    farms[k["id"]]=FarmPLC(jconf=k)
-
-
-fr(k["id"]).loadpointsfromfile("standartpoints.json")
+   fr(k["id"]).loadpointsfromfile("standartpoints.json")
 
 
 async def printfarms(): #процедурка для вывода считаных значений и записи переменных

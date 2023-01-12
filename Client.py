@@ -5,7 +5,7 @@ from asyncua import Client, ua, Node
 from asyncua.common.xmlexporter import  XmlExporter
 
 
-_logger = logging.getLogger(__name__)
+mylogger = logging.getLogger("ifarm")
 
 
 class SubHandler:
@@ -16,13 +16,13 @@ class SubHandler:
     def datachange_notification(self, node: Node, val, data):
          # called for every datachange notification from server
         print("id",node.nodeid.Identifier, val)
-        #_logger.info("datachange_notification %r %s", node, val)
+        #mylogger.info("datachange_notification %r %s", node, val)
     def event_notification(self, event: ua.EventNotificationList):
        #called for every event notification from server
         pass
     def status_change_notification(self, status: ua.StatusChangeNotification):
         #called for every status change notification from server
-       pass #_logger.info("status_notification %s", status)
+       pass #mylogger.info("status_notification %s", status)
 
 async def main():
     handler = SubHandler()
@@ -33,7 +33,7 @@ async def main():
         client.set_password("wago")
         try:
             async with client:
-                _logger.warning("Connected")
+                mylogger.warning("Connected")
                 subscription = await client.create_subscription(500, handler)
                 #определяем Node как список с единственным тегом
                 
@@ -65,7 +65,7 @@ async def main():
                     await asyncio.sleep(1)
                     await client.check_connection()  # Throws a exception if connection is lost
         except (ConnectionError, ua.UaError):
-            _logger.warning("Reconnecting in 2 seconds")
+            mylogger.warning("Reconnecting in 2 seconds")
             await asyncio.sleep(2)
 
 if __name__ == "__main__":

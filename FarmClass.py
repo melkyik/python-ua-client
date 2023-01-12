@@ -5,7 +5,7 @@ import asyncio #https://github.com/FreeOpcUa/opcua-asyncio
 from prettytable import PrettyTable
 #from PointTag import PointTag
 
-#_logger = logging.getLogger(__name__)
+mylogger = logging.getLogger("ifarm")
 class SubHandler:
   
     def __init__(self):
@@ -13,7 +13,7 @@ class SubHandler:
         self.datachanged     = False
     def datachange_notification(self, node: Node, val, data):
          # called for every datachange notification from server
-        #_logger.info("datachange_notification %r %s", node, val)
+        #mylogger.info("datachange_notification %r %s", node, val)
         #переводим в строку тк node.nodeid.Identifier возвратит будет только часть имени в словаре типа 
         # например |var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.PLC_PRG.counter
         self.Value[str(node.nodeid.Identifier)]=val
@@ -25,7 +25,7 @@ class SubHandler:
         pass
     def status_change_notification(self, status: ua.StatusChangeNotification):
         #called for every status change notification from server
-       # _logger.info("status_notification %s", status)
+       # mylogger.info("status_notification %s", status)
         pass
 
 
@@ -105,7 +105,15 @@ class FarmPLC:
 #--------------------------------------------------------
     def getValueShort(self,short)->str: 
         #возращает значение сохраненое в основном цикле
-            return self.getTagByShort(short).value
+        res=self.getTagByShort(short).value
+        try:
+            if res in (True,False):
+                return str(res)
+            s=float(res)
+            return f"{s:.4}"
+        except :
+            return str(res)
+         
 
 #--------------------------------------------------------
     def getPointByRetAddr(self,retaddr)->PointTag:
@@ -135,10 +143,10 @@ class FarmPLC:
                 if (type(tag.uatype)==ua.VariantType): #если уже записан тип в переменную - читать не обязательно
                     dv = ua.DataValue(ua.Variant(val,tag.uatype)) #формируем значение особого типа для передачи на opc
                     await writenode.write_value(dv)#произведем запись
-            except:
-                print("ошибка записи!", tag.uatype) 
+            except (Exception, ua.UaError) as error:
+                mylogger.warning("ошибка записи %s! %s",short,error) 
             else:
-                print (f"значение записано {self.getTagByShort(short).addr} {self.getTagByShort(short).oldval} -> {val}")
+                mylogger.debug(f"значение записано {self.getTagByShort(short).addr} {self.getTagByShort(short).oldval} -> {val}")
                 await self.updatevalue(short)
 
   #--------------------------------------------------------           
@@ -155,7 +163,7 @@ class FarmPLC:
             return self.getTagByShort(short).value
 
         except:
-            print("ошибка чтения",short)
+            mylogger.warning("Ошибка чтения %s",short)
             return None
         finally:
             if (self.getTagByShort(short).value != self.getTagByShort(short).oldval) :
@@ -169,8 +177,8 @@ class FarmPLC:
         #передаем список точек для печати или напечатаем все по умолчанию
         t=PrettyTable(["Point name","Value"])
         for x in self.Value:
-                t.add_row([self.Value[x].name,self.getValueShort(x)])#)
-        print(self.jconf["name"],self.connectionstatus)
+             t.add_row([self.getTagByShort(x).name,self.getValueShort(x)])#)
+        print(self.jconf["name"], self.connectionstatus)
         print(t) 
     
 
@@ -206,8 +214,8 @@ class FarmPLC:
                             #!!эта строка ниже нужна для отображения передачи с клиентов для проверки если не работает метод запроса
                             #for n in self.value: print(n,self.value[n], '\n ' ) 
                         await self.client.check_connection()  # отсюда вызывается исклюение об обрыве связи и запускается реконнект клиента 
-            except (ConnectionError, ua.UaError,asyncio.exceptions.TimeoutError):
-               #_logger.warning("Reconnecting in 2 seconds")
+            except (ConnectionError, ua.UaError,asyncio.exceptions.TimeoutError) as error:
+                mylogger.warning("%s-%s Reconnecting in 2 seconds",self.name,error)
                 self.connectionstatus='Timeout!'
                 await asyncio.sleep(2)
           

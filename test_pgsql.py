@@ -3,8 +3,10 @@ import psycopg2
 from psycopg2 import Error
 import json
 import asyncio
-import re
+import logging
 from FarmClass import FarmPLC
+
+mylogger = logging.getLogger("ifarm")
 farms=dict()
 def fr(s)->FarmPLC:
       #транслятор указателя в тип FarmPLC для удобства кода и спелчека 
@@ -30,22 +32,22 @@ class ifarmPgSql:
             # Курсор для выполнения операций с базой данных
             with self.connection.cursor() as cursor:
                 # Распечатать сведения о PostgreSQL
-                print("Информация о сервере PostgreSQL")
-                print(self.connection.get_dsn_parameters(), "\n")
+                mylogger.info("Информация о сервере PostgreSQL")
+                mylogger.info(f"{self.connection.get_dsn_parameters()}\n")
                 # Выполнение SQL-запроса
                 cursor.execute("SELECT version();")
                 # Получить результат
                 record = cursor.fetchone()
-                print("Вы подключены к - ", record, "\n")
+                mylogger.info(f"Вы подключены к - {record,} \n")
 
         except (Exception, Error) as error:
-            print("Ошибка при работе с PostgreSQL", error)
+            mylogger.warning("Ошибка при работе с PostgreSQL >%s", error)
 #--------------------------------------------------------
     def close(self):   
         #разрыв соединения  
             if self.connection:
                 self.connection.close()
-                print("Соединение с PostgreSQL закрыто")
+                mylogger.info("Соединение с PostgreSQL закрыто")
 #--------------------------------------------------------                
     def get_farm_settings(self)->list:
         #считывание параметров связи для фермы  
@@ -102,6 +104,10 @@ async def printfarms(): #процедурка для вывода считаны
 
 if __name__ == "__main__":
 
+    logging.basicConfig(level=logging.WARNING,
+                        format="%(asctime)s: %(message)s",
+                        datefmt=  '%Y-%m-%d %H:%M:%S')
+ 
     base=ifarmPgSql() #
     base.connect() #зацеп к базе
     settings=base.get_farm_settings() #читаем фермы с базы
@@ -128,10 +134,10 @@ if __name__ == "__main__":
          
 
         except KeyError as error: #ловушка на некорректную конфу в базе
-            print(f"косяк в конфе фермы  {k[0]}, глюк в поле {error}" )
-        else:
-           for v in farms[k[0]].Value: #вывод точек и их значения
-                print( farms[k[0]].Value[v])
+            mylogger.warning(f"косяк в конфе фермы  {k[0]}, глюк в поле {error}" )
+       # else:
+           #for v in farms[k[0]].Value: #вывод точек и их значения
+            #    mylogger.info( farms[k[0]].Value[v])
               
     base.close()
 

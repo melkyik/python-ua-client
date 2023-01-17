@@ -3,7 +3,8 @@ from asyncua import Client, ua, Node
 import logging
 import asyncio #https://github.com/FreeOpcUa/opcua-asyncio
 from prettytable import PrettyTable
-#from PointTag import PointTag
+
+
 
 mylogger = logging.getLogger("ifarm")
 class SubHandler:
@@ -29,6 +30,8 @@ class SubHandler:
         pass
 
 
+
+    
 class PointTag: 
 
     #в планах перевести точки в этот класс где будут хранится нужные параметры в том числе статус записи
@@ -53,8 +56,17 @@ class PointTag:
 # класс экземпляров клиентов ферм
 #--------------------------------------------------------
 class FarmPLC:
-       
-    #при инициализации скармливаем распакованый словарь из файла конфигурации json с нужными данными
+    """
+    Класс обработки плк ферм. При инициализации передать словарь в виде
+      jconf:dict={ "id":"1",
+      "name":"PLC default",
+      "URL":"opc.tcp://10.10.2.244:4840",
+      "login":"admin",
+      "password":"wago",
+      "prefix":"ns=4;s=",
+      "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application."
+      },
+    """
     def __init__(self,jconf:dict={ "id":"1",
       "name":"PLC default",
       "URL":"opc.tcp://10.10.2.244:4840",
@@ -63,20 +75,24 @@ class FarmPLC:
       "prefix":"ns=4;s=",
       "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application."
       },log=False):
-      
       #инициализация и заполнение первичными данными из конфигурационного файла
       self.Value               =  {} #сопоставление короткого адреса и текущего значения, словарь текущих значений
       self.jconf    =           jconf.copy()
       #print(self.jconf)
-      self.prefix   =           self.jconf['prefix'] #префикс точек списка подписки
-      self.retprefix   =        self.jconf['retprefix'] #префикс точек ответа подписки в ответе str(node.nodeid.Identifier)
+      self.prefix   =           str(self.jconf['prefix']) #префикс точек списка подписки
+      self.retprefix   =        str(self.jconf['retprefix']) #префикс точек ответа подписки в ответе str(node.nodeid.Identifier)
                                                 #первые символы префикса "ns=4;s=" там отсуствуют
       self.connectionstatus =   str()
-      self.name     =           self.jconf['name']  
-      self.URL      =           self.jconf['URL']
+      self.name     =           str(self.jconf['name'] )
+      self.URL      =           str(self.jconf['URL'])
       self.SubscribeNodes    =  list() #список точек для подписки, остальные опрашиваются по общему опросу
  
     def addpoint(self,addresses:list):
+        """
+        Добавляет точку по формату из начала списка 
+        addresses[0]= имя точки, 
+        addresses[1]= описание точки
+        """
         s=self.prefix+self.retprefix+addresses[0]
         self.SubscribeNodes.append(s)
         self.Value[addresses[0]] = PointTag(
@@ -84,7 +100,9 @@ class FarmPLC:
                 name=addresses[1]
                  )
     def loadpointsfromfile(self,filename):
-      #загружаем стандартные точки из файла, для дополнительных надо чтото придумать... =(
+      """
+      загружаем стандартные точки из файла
+      """
       with open(filename, "r") as read_file: 
         self.pointsdata = json.load(read_file)
         for p in self.pointsdata['Tag']:
@@ -96,6 +114,9 @@ class FarmPLC:
                  )
 #--------------------------------------------------------
     def getTagByShort(self,s:str)->PointTag:
+        """
+        транслятор указателя на точку в коротком адресе в тип PointTag для удобства
+        """
         try:
         #транслятор указателя в тип PointTag для удобства кода и спелчека 
             if isinstance(self.Value[s],PointTag):
@@ -104,7 +125,9 @@ class FarmPLC:
                 return None
 #--------------------------------------------------------
     def getValueShort(self,short)->str: 
-        #возращает значение сохраненое в основном цикле
+        """
+        возращает значение сохраненое в основном цикле
+        """
         res=self.getTagByShort(short).value
         try:
             if res in (True,False):
@@ -117,18 +140,24 @@ class FarmPLC:
 
 #--------------------------------------------------------
     def getPointByRetAddr(self,retaddr)->PointTag:
-        #возвразщает точку по ее RetAdr    
+            """
+             возвращает точку по ее RetAdr
+            """    
             for i in self.Value:
                 if (self.retprefix+i)==retaddr:
                     return self.Value[i]
             return None
 #--------------------------------------------------------
     def getNodeShort(self,short)->Node:
-        #возвращает обьект Node по адресу
+        """
+        возвращает обьект Node по короткому адресу
+        """
         return self.client.get_node(self.prefix+self.retprefix+short)
 #--------------------------------------------------------
     async def WriteValueShort(self,short,val):
-        #производит запись значения по адресу, предварительно определив ее тип для корректного преобразования типа
+        """
+        производит запись значения по адресу, предварительно определив ее тип для корректного преобразования типа
+        """
         if self.connectionstatus == 'Connected':
             tag=self.getTagByShort(short)  
             if not tag:                         #бывает надо записать точку которой нет в подписке пока пусть будет это условие. оно создаст новую точку в словаре
@@ -151,7 +180,8 @@ class FarmPLC:
 
   #--------------------------------------------------------           
     async def updatevalue(self,short)->str:
-        #для обновления значения по адресу без учета подписки
+        """для обновления значения по адресу без учета подписки
+        """
         try:
             await self.client.check_connection()
             node=  self.getNodeShort(short=short)
@@ -170,11 +200,12 @@ class FarmPLC:
                 self.getTagByShort(short).oldval=self.getTagByShort(short).value
       
     def  __str__(self)->str:
-        #возвращает имя и url фермы
+        """возвращает имя и url фермы
+        """
         return f"{self.name} {self.URL}"
     
     def PrintValues(self,fields:list=[]):
-        #передаем список точек для печати или напечатаем все по умолчанию
+        """передаем список точек для печати или напечатаем все по умолчанию"""
         t=PrettyTable(["Point name","Value"])
         for x in self.Value:
              t.add_row([self.getTagByShort(x).name,self.getValueShort(x)])#)
@@ -184,9 +215,10 @@ class FarmPLC:
 
 
 
-    
+    #--------------------------------------------------------  
     async def loop(self):
-        #метод для зацикливания ,
+        """метод для зацикливания опроса, """
+
         while True:
             self.handler = SubHandler() #указатель на класс обработки подписки
             self.client   =   Client(url=self.URL)  #клиент  фермы
@@ -218,7 +250,57 @@ class FarmPLC:
                 mylogger.warning("%s-%s Reconnecting in 2 seconds",self.name,error)
                 self.connectionstatus='Timeout!'
                 await asyncio.sleep(2)
+
+ ##
+ #класс со списком ферм для удобства поиска и обращения в списке
+ # 
+ # 
+ #                
+class  FarmList:
+    """класс со списком ферм для удобства поиска и обращения в списке"""
+    def __init__(self,desc:str()) -> None:
+        self.farms={}
+        self.desc=str(desc)
+
+    
+    def get(self,id)-> FarmPLC:
+        """возвращает ферму по ее id"""
+        try:
+      
+         if isinstance(self.farms[str(id)],FarmPLC):
+                return self.farms[str(id)]
+        except(KeyError):
+                return None      
           
+    def add(self,jconf:dict={ "id":"1",
+      "name":"PLC default",
+      "URL":"opc.tcp://10.10.2.244:4840",
+      "login":"admin",
+      "password":"wago",
+      "prefix":"ns=4;s=",
+      "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application."
+      }):
+      """добавляет ферму в список на ввводе нужно указать
+      jconf:dict={ "id":"1",
+      "name":"PLC default",
+      "URL":"opc.tcp://10.10.2.244:4840",
+      "login":"admin",
+      "password":"wago",
+      "prefix":"ns=4;s=",
+      "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application." """
+      self.farms[jconf["id"]] = FarmPLC(jconf)
+    def get_by_name(self,name:str)->FarmPLC:
+        """производит поиск и возвращает экземпляр FarmPLC по имени name """
+        try:
+            for k in self.farms:
+                if self.get(k).name == name:
+                    return self.get(k)
+            mylogger.warning("%s Farm isnt found! in list %s",name,self.desc)
+        except (KeyError) as error:
+                mylogger.warning("get_by_name keyerror!  in list %s - %s",self.desc,error)
+                return None    
+
+
 
 
 

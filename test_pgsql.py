@@ -4,19 +4,13 @@ from psycopg2 import Error
 import json
 import asyncio
 import logging
-from FarmClass import FarmPLC
+from FarmClass import FarmPLC,FarmList
 
 mylogger = logging.getLogger("ifarm")
-farms=dict()
-def fr(s)->FarmPLC:
-      #транслятор указателя в тип FarmPLC для удобства кода и спелчека 
-    try:
-        if isinstance(farms[str(s)],FarmPLC):
-            return farms[str(s)]
-    except(KeyError):
-            return None
+farms=FarmList("Список ферм из базы")
+"""Список ферм класc FarmList"""
 class ifarmPgSql: 
-    #класс определяет подключение к субд
+    """класс определяет подключение к субд PostgreSql"""
     def __init__(self) -> None:
         pass
     def connect(self):
@@ -44,13 +38,13 @@ class ifarmPgSql:
             mylogger.warning("Ошибка при работе с PostgreSQL >%s", error)
 #--------------------------------------------------------
     def close(self):   
-        #разрыв соединения  
+            """разрыв соединения"""  
             if self.connection:
                 self.connection.close()
                 mylogger.info("Соединение с PostgreSQL закрыто")
 #--------------------------------------------------------                
     def get_farm_settings(self)->list:
-        #считывание параметров связи для фермы  
+        """считывание параметров связи для фермы""" 
         if self.connection:
             with self.connection.cursor() as cursor:
                 query= "SELECT scada_settings.title\
@@ -61,7 +55,7 @@ class ifarmPgSql:
                 return cursor.fetchall()
 #--------------------------------------------------------    
     def getpointsforfarm(self,farm)->list:
-    #считывание списка точек, где 1 позиция  - имя точки, вторая позиция описание
+        """считывание списка точек, где 1 позиция  - имя точки, вторая позиция описание"""
         if self.connection:
             with self.connection.cursor() as cursor:
                 query= f"SELECT identity,scada_sensors.title title\
@@ -77,7 +71,7 @@ class ifarmPgSql:
         
 
 def extract_point_name(s)->list:
-    #считывает имя точки и парсит его на составляющие - префиксы и имя
+    """считывает имя точки и парсит его на составляющие - префиксы и имя"""
     if s.find('RS.Application.'):
         return s[s.find('RS.Application.')+15:],s[s.find("|var|"):s.find('RS.Application.')+15],"ns=4;s="
     else:
@@ -88,17 +82,17 @@ def extract_point_name(s)->list:
 
 async def main():
         tasks=[]
-        for k in farms:
-                tasks.append(asyncio.create_task(fr(k).loop()))
+        for k in farms.farms:
+                tasks.append(asyncio.create_task(farms.get(k).loop()))
         tasks.append(asyncio.create_task(printfarms()))
         await asyncio.gather(*tasks)
 
-async def printfarms(): #процедурка для вывода считаных значений и записи переменных
+async def printfarms(): 
+        """процедурка для вывода считаных значений и записи переменных"""
         while True:
-  
             print("\033c", end='') 
-            for k in farms:
-               fr(k).PrintValues()
+            for k in farms.farms:
+              farms.get(k).PrintValues()
            # await fr(1).WriteValueShort("GVL.AIArray.AI[0].AIData.Value",c)  
             await asyncio.sleep(1)            
 
@@ -118,8 +112,8 @@ if __name__ == "__main__":
         try:
             points=base.getpointsforfarm(k[0]) #считаем список точек для этой фермы
     
-            farms[k[0]]=FarmPLC(   #вызов конструктора
-            jconf={ "id":i,
+            farms.add(   #вызов конструктора
+            jconf={ "id":str(i),
                 "name":k[0],
                 "URL":f"opc.tcp://{js['opcEndpoint']['host']}:4840",
                 "login":f"{js['opcEndpoint']['security']['userName']}",
@@ -130,7 +124,7 @@ if __name__ == "__main__":
             )
             for p in points:
                 shortpoint=extract_point_name(p[0])[0],p[1]
-                farms[k[0]].addpoint(shortpoint)            #добавление точек в подписку и конфигурацию
+                farms.get(i).addpoint(shortpoint)            #добавление точек в подписку и конфигурацию
          
 
         except KeyError as error: #ловушка на некорректную конфу в базе

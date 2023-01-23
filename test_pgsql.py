@@ -1,11 +1,12 @@
 
-import psycopg2
-from psycopg2 import Error
+import asyncpg
 import json
 import asyncio
 import logging
 from FarmClass import FarmPLC,FarmList
-
+logging.basicConfig(level=logging.WARNING,
+                        format="%(asctime)s: %(message)s",
+                        datefmt=  '%Y-%m-%d %H:%M:%S')  
 mylogger = logging.getLogger("ifarm")
 farms=FarmList("Список ферм из базы")
 """Список ферм класc FarmList"""
@@ -13,51 +14,36 @@ class ifarmPgSql:
     """класс определяет подключение к субд PostgreSql"""
     def __init__(self) -> None:
         pass
-    def connect(self):
-        try:
-            # Подключение к существующей базе данных
-            self.connection = psycopg2.connect(user="igor",
+    async def connect(self):
+         # Подключение к существующей базе данных
+        self._connection= asyncpg.connect(user="igor",
                                         # пароль, который указали при установке PostgreSQL
                                         password="adminsa",
                                         host="10.10.2.152",
                                         port="5432",
                                         database="ifarm")
-
-            # Курсор для выполнения операций с базой данных
-            with self.connection.cursor() as cursor:
-                # Распечатать сведения о PostgreSQL
-                mylogger.info("Информация о сервере PostgreSQL")
-                mylogger.info(f"{self.connection.get_dsn_parameters()}\n")
-                # Выполнение SQL-запроса
-                cursor.execute("SELECT version();")
-                # Получить результат
-                record = cursor.fetchone()
-                mylogger.info(f"Вы подключены к - {record,} \n")
-
-        except (Exception, Error) as error:
-            mylogger.warning("Ошибка при работе с PostgreSQL >%s", error)
+        self.conn:asyncpg.connection.Connection = self._connection
+              
 #--------------------------------------------------------
-    def close(self):   
+    async def close(self):   
             """разрыв соединения"""  
-            if self.connection:
-                self.connection.close()
+            if self._connection:
                 mylogger.info("Соединение с PostgreSQL закрыто")
+                self._connection.close()
 #--------------------------------------------------------                
-    def get_farm_settings(self)->list:
+    async def get_farm_settings(self)->list:
         """считывание параметров связи для фермы""" 
-        if self.connection:
-            with self.connection.cursor() as cursor:
+        if self._connection:
                 query= "SELECT scada_settings.title\
                 ,scada_settings.settings\
                 FROM scada inner join scada_settings on scada.setting_id = scada_settings.id\
                 where status='active'"
-                cursor.execute(query)
-                return cursor.fetchall()
+                s=await self.conn.fetch(query) 
+                return s
 #--------------------------------------------------------    
-    def getpointsforfarm(self,farm)->list:
-        """считывание списка точек, где 1 позиция  - имя точки, вторая позиция описание"""
-        if self.connection:
-            with self.connection.cursor() as cursor:
+    async def getpointsforfarm(self,farm)->list:
+        """считывание списка точек, где 1 позиция  - identity имя точки, 2 позиция title описание"""
+        if self.conn:
                 query= f"SELECT identity,scada_sensors.title title\
                         FROM public.scada_sensors \
                         inner join scada on scada_id=scada.id \
@@ -65,11 +51,10 @@ class ifarmPgSql:
                         WHERE scada_sensors.status='active'\
                         and scada_settings.title = '{farm}'\
                         ;"
-                cursor.execute(query)
-                return cursor.fetchall()
+                s=await self.conn.fetch(query) 
+                return s
 
         
-
 def extract_point_name(s)->list:
     """считывает имя точки и парсит его на составляющие - префиксы и имя"""
     if s.find('RS.Application.'):
@@ -82,6 +67,7 @@ def extract_point_name(s)->list:
 
 async def main():
         tasks=[]
+        await setup()
         for k in farms.farms:
                 tasks.append(asyncio.create_task(farms.get(k).loop()))
         tasks.append(asyncio.create_task(printfarms()))
@@ -96,25 +82,21 @@ async def printfarms():
            # await fr(1).WriteValueShort("GVL.AIArray.AI[0].AIData.Value",c)  
             await asyncio.sleep(1)            
 
-if __name__ == "__main__":
 
-    logging.basicConfig(level=logging.WARNING,
-                        format="%(asctime)s: %(message)s",
-                        datefmt=  '%Y-%m-%d %H:%M:%S')
- 
+async def setup():
     base=ifarmPgSql() #
-    base.connect() #зацеп к базе
-    settings=base.get_farm_settings() #читаем фермы с базы
+    await base.connect() #зацеп к базе
+    settings=await base.get_farm_settings() #читаем фермы с базы
     i=0
     for k in settings:     #создание экземпляров обьектов ферм по списку
         i+=1               
-        js=json.loads(k[1])
+        js=json.loads(k["settings"])
         try:
-            points=base.getpointsforfarm(k[0]) #считаем список точек для этой фермы
+            points=base.getpointsforfarm(k["title"]) #считаем список точек для этой фермы
     
             farms.add(   #вызов конструктора
             jconf={ "id":str(i),
-                "name":k[0],
+                "name":k["title"],
                 "URL":f"opc.tcp://{js['opcEndpoint']['host']}:4840",
                 "login":f"{js['opcEndpoint']['security']['userName']}",
                 "password":f"{js['opcEndpoint']['security']['password']}",
@@ -125,15 +107,16 @@ if __name__ == "__main__":
             for p in points:
                 shortpoint=extract_point_name(p[0])[0],p[1]
                 farms.get(i).addpoint(shortpoint)            #добавление точек в подписку и конфигурацию
-         
+            print("setup complete")
+            await base.close()
 
         except KeyError as error: #ловушка на некорректную конфу в базе
             mylogger.warning(f"косяк в конфе фермы  {k[0]}, глюк в поле {error}" )
        # else:
            #for v in farms[k[0]].Value: #вывод точек и их значения
             #    mylogger.info( farms[k[0]].Value[v])
-              
-    base.close()
+
+if __name__ == "__main__":             
 
     asyncio.run(main())   
    

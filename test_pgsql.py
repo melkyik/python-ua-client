@@ -10,6 +10,7 @@ logging.basicConfig(level=logging.WARNING,
 mylogger = logging.getLogger("ifarm")
 farms=FarmList("Список ферм из базы")
 setupfarms:bool=False
+
 """Список ферм класc FarmList"""
 class ifarmPgSql: 
     """класс определяет подключение к субд PostgreSql"""
@@ -34,17 +35,17 @@ class ifarmPgSql:
 #--------------------------------------------------------                
     async def get_farm_settings(self)->list:
         """считывание параметров связи для фермы""" 
-        await self.connect() 
+      
         if self._connection:
                 query= "SELECt title,settings \
                 FROM scada_settings "
                 s=await self._connection.fetch(query) 
-        await self.close() 
+   
         return s
 #--------------------------------------------------------    
     async def getpointsforfarm(self,farm)->list:
         """считывание списка точек, где 1 позиция  - identity имя точки, 2 позиция title описание"""
-        await self.connect() 
+   
   
         if self.conn:
                 query= f"SELECT identity,scada_sensors.title title,\
@@ -59,7 +60,6 @@ class ifarmPgSql:
                             ;"
 
                 s=await self.conn.fetch(query)
-        await self.close()  
         return s
 
         
@@ -77,26 +77,8 @@ def extract_point_name(s)->list:
 
 
 
-async def main():
-        tasks=[]
-        await setup()
-        for k in farms.farms:
-                tasks.append(asyncio.create_task(farms.get(k).loop()))
-       # tasks.append(asyncio.create_task(printfarms()))
-        await asyncio.gather(*tasks)
-
-async def printfarms(): 
-        """процедурка для вывода считаных значений и записи переменных"""
-        while True:
-            print("\033c", end='') 
-            for k in farms.farms:
-              farms.get(k).PrintValues()
-            #await fr(1).WriteValueShort("GVL.AIArray.AI[0].AIData.Value",c)  
-            await asyncio.sleep(1)            
-
-
+base=ifarmPgSql()
 async def setup():
-    base=ifarmPgSql() #
     settings=await base.get_farm_settings() #читаем фермы с базы
    # print(settings)
     i=0
@@ -132,10 +114,29 @@ async def setup():
             #    mylogger.info( farms[k[0]].Value[v])
     print("сумма активных ферм:",i)
     return True
+
+async def main():
+        tasks=[]
+        await base.connect() 
+        await setup()
+        await base.close() 
+        for k in farms.farms:
+                tasks.append(asyncio.create_task(farms.get(k).loop()))
+       # tasks.append(asyncio.create_task(printfarms()))
+        await asyncio.gather(*tasks)
+
+async def printfarms(): 
+        """процедурка для вывода считаных значений и записи переменных"""
+        while True:
+            print("\033c", end='') 
+            for k in farms.farms:
+              farms.get(k).PrintValues()
+            #await fr(1).WriteValueShort("GVL.AIArray.AI[0].AIData.Value",c)  
+            await asyncio.sleep(1)            
 if __name__ == "__main__":           
 
     asyncio.run(main())   
-   
+  
   
         
     

@@ -4,13 +4,59 @@ import json
 import asyncio
 import logging
 from FarmClass import FarmPLC,FarmList
+import uvicorn
+from fastapi import FastAPI
+
+####=====================
+#веб сервак
+#================
+app=FastAPI()
+@app.get("/")
+async def root():
+    return {"message": "Hello World"}
+    
+#d = [{'User': 'a', 'date': date.today(), 'count': 1},
+#        {'User': 'b', 'date':  date.today(), 'count': 2}]
+@app.get("/farm/all")
+async def allfarminfo():
+        ret=[]
+        for k in farms.farms:
+            fr={}
+            fr["id"]=k
+            fr["name"]=farms.get(k).name
+            fr["connection"]=farms.get(k).connectionstatus
+            vl={}
+            for v in farms.get(k).Value:
+                vl[farms.get(k).getTagByShort(v).name]=farms.get(k).getValueShort(v)
+            fr["values"]=vl  
+            ret.append(fr)             
+        return {"allfarms":ret}
+
+@app.get("/farm/{name}")
+async def allfarminfo(name:str):
+            #fr={}
+            # fr["id"]=farms.get_by_name(name).jconf["id"]
+            # fr["name"]=farms.get_by_name(name).name
+            # fr["connection"]=farms.get_by_name(name).connectionstatus
+            # vl={}
+            # for v in farms.get_by_name(name).Value:
+            #     vl[farms.get_by_name(name).getTagByShort(v).name]=farms.get_by_name(name).getValueShort(v)
+            # fr["values"]=vl            
+            return {"farm":farms.get_by_name(name)}
+
+
+
+
+
+
+
 logging.basicConfig(level=logging.WARNING,
                         format="%(asctime)s: %(message)s",
                         datefmt=  '%Y-%m-%d %H:%M:%S')  
 mylogger = logging.getLogger("ifarm")
-farms=FarmList("Список ферм из базы")
-setupfarms:bool=False
 
+setupfarms:bool=False
+farms=FarmList("Список ферм из базы")
 """Список ферм класc FarmList"""
 class ifarmPgSql: 
     """класс определяет подключение к субд PostgreSql"""
@@ -29,24 +75,22 @@ class ifarmPgSql:
 #--------------------------------------------------------
     async def close(self):   
             """разрыв соединения"""  
-            if self._connection:
+            if self.conn:
                 mylogger.info("Соединение с PostgreSQL закрыто")
-                await self._connection.close()
+                await self.conn.close()
 #--------------------------------------------------------                
     async def get_farm_settings(self)->list:
         """считывание параметров связи для фермы""" 
       
-        if self._connection:
+        if self.conn:
                 query= "SELECt title,settings \
                 FROM scada_settings "
-                s=await self._connection.fetch(query) 
+                s=await self.conn.fetch(query) 
    
         return s
 #--------------------------------------------------------    
     async def getpointsforfarm(self,farm)->list:
         """считывание списка точек, где 1 позиция  - identity имя точки, 2 позиция title описание"""
-   
-  
         if self.conn:
                 query= f"SELECT identity,scada_sensors.title title,\
 						scada_settings.title\
@@ -78,7 +122,9 @@ def extract_point_name(s)->list:
 
 
 base=ifarmPgSql()
+"""создает класс работы с базой"""
 async def setup():
+    """читает данные всех ферм"""
     settings=await base.get_farm_settings() #читаем фермы с базы
    # print(settings)
     i=0
@@ -87,7 +133,6 @@ async def setup():
         j= json.loads(k["settings"])
         js= json.loads(j) #хз почему но первый вызов делает на выходе строку а второй только конвертит в словарь!
         try:
-           
             points=await base.getpointsforfarm(k["title"]) #считаем список точек для этой фермы
             print(f"Ферма {k['title']} {len(points)} точек")
             #print(points)
@@ -109,30 +154,41 @@ async def setup():
           
         except KeyError as error: #ловушка на некорректную конфу в базе
             mylogger.warning(f"косяк в конфе фермы  {k[0]}, глюк в поле {error}" )
-       # else:
-           #for v in farms[k[0]].Value: #вывод точек и их значения
-            #    mylogger.info( farms[k[0]].Value[v])
-    print("сумма активных ферм:",i)
+      
+    print("сумма активных ферм:",len(farms.farms))
+   
     return True
 
-async def main():
-        tasks=[]
-        await base.connect() 
-        await setup()
-        await base.close() 
-        for k in farms.farms:
-                tasks.append(asyncio.create_task(farms.get(k).loop()))
-       # tasks.append(asyncio.create_task(printfarms()))
-        await asyncio.gather(*tasks)
 
 async def printfarms(): 
+        global farms
         """процедурка для вывода считаных значений и записи переменных"""
         while True:
             print("\033c", end='') 
             for k in farms.farms:
               farms.get(k).PrintValues()
             #await fr(1).WriteValueShort("GVL.AIArray.AI[0].AIData.Value",c)  
-            await asyncio.sleep(1)            
+            await asyncio.sleep(1)     
+
+async def setups():
+    
+        await base.connect() 
+        await setup()
+        await base.close() 
+
+async def main():
+        global farms
+        config = uvicorn.Config(app, port=8000, log_level="info")
+        server = uvicorn.Server(config) 
+        tasks=[]
+        await setups()
+        tasks.append(asyncio.create_task(server.serve()))
+       # for k in farms.farms:
+        #       tasks.append(asyncio.create_task(farms.get(k).loop()))
+       # tasks.append(asyncio.create_task(printfarms()))
+
+        await asyncio.gather(*tasks)
+       
 if __name__ == "__main__":           
 
     asyncio.run(main())   

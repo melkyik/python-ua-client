@@ -258,11 +258,12 @@ class FarmPLC:
  #                
 class  FarmList:
     """класс со списком ферм для удобства поиска и обращения в списке"""
-    def __init__(self,desc:str()) -> None:
+    def __init__(self,desc:str) -> None:
         self.farms={}
         self.desc=str(desc)
 
-    
+    def __str__(self) -> str:
+        return self.desc + str(len(self.farms))
     def get(self,id)-> FarmPLC:
         """возвращает ферму по ее id"""
         try:
@@ -303,14 +304,6 @@ class  FarmList:
 
 
 
-
-
-"""
-if __name__ == "__main__":
-
-    logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())
-    """
 
 
 

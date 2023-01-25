@@ -6,7 +6,33 @@ import logging
 from FarmClass import FarmPLC,FarmList
 import uvicorn
 from fastapi import FastAPI
+from uvicorn.main import Server
 
+original_handler = Server.handle_exit
+
+class AppStatus:
+    should_exit = False
+
+    @staticmethod
+    def handle_exit(*args, **kwargs):
+        AppStatus.should_exit = True
+        original_handler(*args, **kwargs)
+    @staticmethod
+    async def terminate(): #для остановки всех процессов ASYNC после выключения веб сервера
+
+          while True:
+            if AppStatus.should_exit:
+                for task in asyncio.all_tasks():
+                    task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                     print("Task cancelled")
+            await asyncio.sleep(0.1)
+Server.handle_exit = AppStatus.handle_exit
+
+#https://coderoad.ru/58133694/%D0%93%D1%80%D0%B0%D0%BC%D0%BE%D1%82%D0%BD%D0%BE%D0%B5-%D0%BE%D1%82%D0%BA%D0%BB%D1%8E%D1%87%D0%B5%D0%BD%D0%B8%D0%B5-uvicorn-starlette-app-%D1%81-websockets
+#https://stackoverflow.com/questions/56052748/python-asyncio-task-cancellation
 ####=====================
 #веб сервак
 #================
@@ -15,8 +41,7 @@ app=FastAPI()
 async def root():
     return {"message": "Hello World"}
     
-#d = [{'User': 'a', 'date': date.today(), 'count': 1},
-#        {'User': 'b', 'date':  date.today(), 'count': 2}]
+
 @app.get("/farm/all")
 async def allfarminfo():
         ret=[]
@@ -33,16 +58,16 @@ async def allfarminfo():
         return {"allfarms":ret}
 
 @app.get("/farm/{name}")
-async def allfarminfo(name:str):
-            #fr={}
-            # fr["id"]=farms.get_by_name(name).jconf["id"]
-            # fr["name"]=farms.get_by_name(name).name
-            # fr["connection"]=farms.get_by_name(name).connectionstatus
-            # vl={}
-            # for v in farms.get_by_name(name).Value:
-            #     vl[farms.get_by_name(name).getTagByShort(v).name]=farms.get_by_name(name).getValueShort(v)
-            # fr["values"]=vl            
-            return {"farm":farms.get_by_name(name)}
+async def farminfo(name:str):
+            fr={}
+            fr["id"]=farms.get_by_name(name).jconf["id"]
+            fr["name"]=farms.get_by_name(name).name
+            fr["connection"]=farms.get_by_name(name).connectionstatus
+            vl={}
+            for v in farms.get_by_name(name).Value:
+                 vl[farms.get_by_name(name).getTagByShort(v).name]=farms.get_by_name(name).getValueShort(v)
+            fr["values"]=vl            
+            return {"farm":fr}
 
 
 
@@ -175,23 +200,27 @@ async def setups():
         await base.connect() 
         await setup()
         await base.close() 
+config = uvicorn.Config(app, port=8000, log_level="info")
+server = uvicorn.Server(config) 
 
 async def main():
         global farms
-        config = uvicorn.Config(app, port=8000, log_level="info")
-        server = uvicorn.Server(config) 
+
         tasks=[]
         await setups()
-        tasks.append(asyncio.create_task(server.serve()))
-       # for k in farms.farms:
-        #       tasks.append(asyncio.create_task(farms.get(k).loop()))
+        #tasks.append(asyncio.create_task(server.serve()))
+        for k in farms.farms:
+              tasks.append(asyncio.create_task(farms.get(k).loop()))
+        tasks.append(asyncio.create_task(AppStatus.terminate()))
+        await server.serve()
+        await asyncio.gather(*tasks)
+
        # tasks.append(asyncio.create_task(printfarms()))
 
-        await asyncio.gather(*tasks)
-       
 if __name__ == "__main__":           
 
     asyncio.run(main())   
+
   
   
         

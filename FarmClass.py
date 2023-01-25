@@ -75,6 +75,7 @@ class FarmPLC:
       "prefix":"ns=4;s=",
       "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application."
       },log=False):
+      self.close=False
       #инициализация и заполнение первичными данными из конфигурационного файла
       self.Value               =  {} #сопоставление короткого адреса и текущего значения, словарь текущих значений
       self.jconf    =           jconf.copy()
@@ -217,8 +218,8 @@ class FarmPLC:
 
     #--------------------------------------------------------  
     async def loop(self):
-        """метод для зацикливания опроса, """
-
+     """метод для зацикливания опроса, """
+     try:
         while True:
             self.handler = SubHandler() #указатель на класс обработки подписки
             self.client   =   Client(url=self.URL)  #клиент  фермы
@@ -250,6 +251,8 @@ class FarmPLC:
                 mylogger.warning("%s-%s Reconnecting in 2 seconds",self.name,error)
                 self.connectionstatus='Timeout!'
                 await asyncio.sleep(2)
+     except(asyncio.exceptions.CancelledError)as  error:
+        mylogger.info("%s-%s exit cycle ",self.name,error)
 
  ##
  #класс со списком ферм для удобства поиска и обращения в списке

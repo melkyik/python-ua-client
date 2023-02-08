@@ -1,8 +1,12 @@
 import json
 from asyncua import Client, ua, Node
+from asyncua.common.subscription import DataChangeNotif
+from asyncua.ua.uatypes import DataValue
 import logging
 import asyncio #https://github.com/FreeOpcUa/opcua-asyncio
 from prettytable import PrettyTable
+from datetime import datetime
+from typing import Optional
 
 
 
@@ -10,14 +14,17 @@ mylogger = logging.getLogger("ifarm")
 class SubHandler:
   
     def __init__(self):
-        self.Value           =  {} #сопоставление адреса и текущего значения
+        self.Value           =  {} #сопоставление адреса и данных подписки
         self.datachanged     = False
-    def datachange_notification(self, node: Node, val, data):
+    """DataChangeNotification(<asyncua.common.subscription.SubscriptionItemData object at 0x000001D010B04F10>, 
+        MonitoredItemNotification(ClientHandle=201, Value=DataValue(Value=Variant(Value=19.709999084472656, VariantType=<VariantType.Float: 10>, Dimensions=None, is_array=False), StatusCode_=StatusCode(value=0), SourceTimestamp=datetime.datetime(2023, 2, 8, 13, 58, 12, 245000), ServerTimestamp=datetime.datetime(2023, 2, 8, 13, 58, 12, 245000), SourcePicoseconds=None, ServerPicoseconds=None)))
+    """
+    def datachange_notification(self, node: Node, val, data:DataChangeNotif):
          # called for every datachange notification from server
-        #mylogger.info("datachange_notification %r %s", node, val)
-        #переводим в строку тк node.nodeid.Identifier возвратит будет только часть имени в словаре типа 
         # например |var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.PLC_PRG.counter
-        self.Value[str(node.nodeid.Identifier)]=val
+        #self.Value[str(node.nodeid.Identifier)]=data# обращаемся к точке по retadr не эффективно - будем искать точки по  полному адресу как ниже!
+        self.Value[str(data.subscription_data.node)]=data 
+        
         self.datachanged=True
         #print(val)
         
@@ -29,29 +36,72 @@ class SubHandler:
        # mylogger.info("status_notification %s", status)
         pass
 
+    def get(self,s:str)-> DataChangeNotif:
+        """возвращает данные точки подписки по ее id"""
+        try:
+            if isinstance(self.Value[str(s)],DataChangeNotif):
+                return self.Value[str(s)]
+        except(KeyError):
+                return None   
+    
+
 
 
     
 class PointTag: 
-
+# Python 3.10+
+#def get_cars(size: str|None=None):
     #в планах перевести точки в этот класс где будут хранится нужные параметры в том числе статус записи
-    def __init__(self,addr:str,name:str):
+    def __init__(self,addr:str,name:Optional[str]=None,baseid:Optional[str]=None,archive:Optional[bool]=False):
+        self.baseId=baseid
+        """ ссылка на ID таблицы PostgreSQL """
         self.addr=addr
+        """ адрес точки"""
         self.uatype=None
+        """ OPC тип точки ua.VariantType"""
         self.oldval=None
+        """ предыдущее значение """
         self.value=None
-        self.status=None
+        """ текущее значение """
+        self.status=False
+        """ статус точки """
         self.name=name
+        """ имя точки """
+        self.plcdate=None
+        """ время обновления точки """
+        self.archve=archive
+        """ архивация точки """
+        self.node:Node=None
+        """ссылка на экземпляр Node """
+        
+
          
  
     def __str__(self) -> str:
-        return f"{self.name if self.name else self.addr} {self.value}"
-    
+        return f"{str(self.name) if self.name else str(self.addr)} {str(self.value)}"
+
+    def get_dict(self)->dict:
+        return {"id":self.baseId,
+                "addr":self.addr,
+                "fulladdr":str(self.node),
+                "name":str(self.name),
+                "plcdate":str(self.plcdate),
+                "archive":self.archve,
+                "value":self.value,
+                "status":self.status}
+
+            
+
     def get_list(self)->list:
         return self.name if self.name else self.addr, self.value       
                
-
-        
+    def get_sql_string(self)->str:
+        if self.archve and self.status :
+            return f"INSERT INTO public.scada_data2(\
+sensor_id, value, timestamp, checked) \
+VALUES ({self.baseId}, {self.value}, '{datetime.now()}', false);"
+        else:
+             return ''
 #--------------------------------------------------------
 # класс экземпляров клиентов ферм
 #--------------------------------------------------------
@@ -77,7 +127,7 @@ class FarmPLC:
       },log=False):
       self.close=False
       #инициализация и заполнение первичными данными из конфигурационного файла
-      self.Value               =  {} #сопоставление короткого адреса и текущего значения, словарь текущих значений
+      self.Value               =  {} #сопоставление короткого адреса и текущего значения, словарь текущих значений 
       self.jconf    =           jconf.copy()
       #print(self.jconf)
       self.prefix   =           str(self.jconf['prefix']) #префикс точек списка подписки
@@ -98,7 +148,9 @@ class FarmPLC:
         self.SubscribeNodes.append(s)
         self.Value[addresses[0]] = PointTag(
                 addr=addresses[0], 
-                name=addresses[1]
+                name=addresses[1],
+                baseid=addresses[2],
+                archive=addresses[3]
                  )
     def loadpointsfromfile(self,filename):
       """
@@ -115,9 +167,7 @@ class FarmPLC:
                  )
 #--------------------------------------------------------
     def getTagByShort(self,s:str)->PointTag:
-        """
-        транслятор указателя на точку в коротком адресе в тип PointTag для удобства
-        """
+        """транслятор указателя на точку в коротком адресе в тип PointTag для удобства"""
         try:
         #транслятор указателя в тип PointTag для удобства кода и спелчека 
             if isinstance(self.Value[s],PointTag):
@@ -126,9 +176,7 @@ class FarmPLC:
                 return None
 #--------------------------------------------------------
     def getValueShort(self,short)->str: 
-        """
-        возращает значение сохраненое в основном цикле
-        """
+        """ возращает значение сохраненое в основном цикле"""      
         res=self.getTagByShort(short).value
         try:
             if res in (True,False):
@@ -138,22 +186,47 @@ class FarmPLC:
         except :
             return str(res)
          
+#--------------------------------------------------------
+    def getTagByBaseId(self,baseid)->PointTag: 
+        """
+        возращает тэг по имени в базе
+        """
+        for i in self.Value:
+            if self.getTagByShort(i).baseId==baseid:
+                return self.getTagByShort(i)
+        return None
 
 #--------------------------------------------------------
     def getPointByRetAddr(self,retaddr)->PointTag:
-            """
-             возвращает точку по ее RetAdr
-            """    
+            """ возвращает точку по ее RetAdr""" 
+               
             for i in self.Value:
                 if (self.retprefix+i)==retaddr:
+                    return self.Value[i]
+            return None
+    def getPointByFullAddr(self,fulladr)->PointTag:
+            """возвращает точку по ее полному адресу"""  
+            for i in self.Value:
+                if (self.prefix+self.retprefix+i)==fulladr:
                     return self.Value[i]
             return None
 #--------------------------------------------------------
     def getNodeShort(self,short)->Node:
         """
-        возвращает обьект Node по короткому адресу
+        возвращает обьект Node по короткому адресу читая из сервера 
         """
-        return self.client.get_node(self.prefix+self.retprefix+short)
+        
+        if self.getTagByShort(short).node:
+            return self.getTagByShort(short).node
+        else:
+            self.getTagByShort(short).node =self.client.get_node(self.prefix+self.retprefix+short)
+            return self.getTagByShort(short).node 
+
+    def _getNodeShort_TA(self,short)->Node:
+        """
+        возвращает обьект Node по короткому адресу читая из списка точек, обновленных подпиской 
+        """
+        return self.getTagByShort(short).node
 #--------------------------------------------------------
     async def WriteValueShort(self,short,val):
         """
@@ -168,6 +241,7 @@ class FarmPLC:
             try:
                 await self.client.check_connection()                
                 writenode=  self.getNodeShort(short)
+                self.getValueShort
                 if not (type(tag.uatype)==ua.VariantType): #тип точки лучше сохранить тк он точно не будет менятся
                     tag.uatype=await writenode.read_data_type_as_variant_type() #произведем чтение типа данных с OPC
                 if (type(tag.uatype)==ua.VariantType): #если уже записан тип в переменную - читать не обязательно
@@ -186,11 +260,20 @@ class FarmPLC:
         try:
             await self.client.check_connection()
             node=  self.getNodeShort(short=short)
+            param=await node.read_data_value()
+            """ пример
+            DataValue(Value=Variant(Value=21.84000015258789, VariantType=<VariantType.Float: 10>, 
+                                    Dimensions=None, is_array=False), 
+                     StatusCode_=StatusCode(value=0), 
+                     SourceTimestamp=datetime.datetime(2023, 2, 8, 11, 12, 53, 725000), 
+                     ServerTimestamp=None, SourcePicoseconds=None, ServerPicoseconds=None)
+            """
             if not self.getTagByShort(short):                         #бывает надо обратится к точке которой нет в подписке пока пусть будет это условие. оно создаст новую точку в словаре
                self.Value[short]=PointTag(short,short)                # позже лучше это удалить
             if not self.getTagByShort(short).uatype: 
-                self.getTagByShort(short).uatype=await node.read_data_type_as_variant_type()
-            self.getTagByShort(short).value=await node.read_value()
+                self.getTagByShort(short).uatype= param.Value.VariantType
+            self.getTagByShort(short).value=param.Value.Value
+            self.getTagByShort(short).plcdate=param.SourceTimestamp
             return self.getTagByShort(short).value
 
         except:
@@ -239,7 +322,14 @@ class FarmPLC:
                         await asyncio.sleep(1)
                         if self.handler.datachanged:
                             for i in self.handler.Value:
-                               self.getPointByRetAddr(retaddr=i).value=self.handler.Value[i]
+                                buf=self.getPointByFullAddr(i)
+                                if buf:
+                                    buf.oldval   =   buf.value
+                                    buf.value    =   self.handler.get(i).monitored_item.Value.Value.Value
+                                    buf.node     =   Node(self.handler.get(i).subscription_data.client_handle, self.handler.get(i).subscription_data.node)
+                                    buf.plcdate  =   self.handler.get(i).monitored_item.Value.SourceTimestamp
+                                    buf.uatype   =   self.handler.get(i).monitored_item.Value.data_type
+                                    buf.status   =   self.handler.get(i).monitored_item.Value.StatusCode.is_good()
                                   # передаем копию считаных данных в массив значений
                             self.handler.datachanged=False
                             self.handler.Value={}
@@ -303,6 +393,12 @@ class  FarmList:
         except (KeyError) as error:
                 mylogger.warning("get_by_name keyerror!  in list %s - %s",self.desc,error)
                 return None    
+    def generate_trends(self)->str:
+        buf=''
+        for k in self.farms:
+            for i in self.get(k).Value:
+                buf+=self.get(k).getTagByShort(i).get_sql_string()
+        return buf
 
 
 

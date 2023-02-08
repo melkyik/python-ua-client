@@ -2,8 +2,8 @@ import logging
 import asyncio
 import json
 from asyncua import Client, ua, Node 
-from asyncua.common.xmlexporter import  XmlExporter
 
+from asyncua.common.subscription import DataChangeNotif
 
 mylogger = logging.getLogger("ifarm")
 
@@ -13,9 +13,13 @@ class SubHandler:
     Subscription Handler. To receive events from server for a subscription
     This class is just a sample class. Whatever class having these methods can be used
     """
-    def datachange_notification(self, node: Node, val, data):
+    """DataChangeNotification(<asyncua.common.subscription.SubscriptionItemData object at 0x000001D010B04F10>, 
+        MonitoredItemNotification(ClientHandle=201, Value=DataValue(Value=Variant(Value=19.709999084472656, VariantType=<VariantType.Float: 10>, Dimensions=None, is_array=False), StatusCode_=StatusCode(value=0), SourceTimestamp=datetime.datetime(2023, 2, 8, 13, 58, 12, 245000), ServerTimestamp=datetime.datetime(2023, 2, 8, 13, 58, 12, 245000), SourcePicoseconds=None, ServerPicoseconds=None)))
+    """
+    async def datachange_notification(self, node: Node, val, data:DataChangeNotif):
          # called for every datachange notification from server
-        print("id",node.nodeid.Identifier, val)
+          #Node(data.subscription_data.client_handle,data.subscription_data.node)
+        print("id",node.nodeid.Identifier, (data.subscription_data.node ))
         #mylogger.info("datachange_notification %r %s", node, val)
     def event_notification(self, event: ua.EventNotificationList):
        #called for every event notification from server
@@ -28,9 +32,9 @@ async def main():
     handler = SubHandler()
 
     while True:
-        client = Client(url="opc.tcp://10.10.2.244:4840")
+        client = Client(url="opc.tcp://10.10.2.30:4840")
         client.set_user("admin")
-        client.set_password("wago")
+        client.set_password("wago1")
         try:
             async with client:
                 mylogger.warning("Connected")
@@ -48,15 +52,14 @@ async def main():
         # nodes_to_read = [Node(client, n) for n in nodes_to_read]
         # i=0
                 ##ниже обязательно должен быть обьявлен список подписки, в примере он из одного блока
-                node = (Node(client,'ns=4; s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.PLC_PRG.counter'),)
+                node = (Node(client,'ns=4; s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.GVL.AIArray.AI[1].AIData.Value'),)
                 
                 #пример простое чтение данных при запуске
-                struct = client.get_node("ns=4; s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.GVL.AIArray.AI[2].AIData.MaxRaw")
-                
-                dv = ua.DataValue(ua.Variant(33, ua.VariantType.UInt16))
-                s=await struct.read_display_name()
-                await struct.write_value(dv)
-                print("ЗНАЧЕНИЕ=",s)
+                struct = client.get_node("ns=4;s=|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.GVL.AIArray.AI[1].AIData.Value")
+         
+                #dv = ua.DataValue(ua.Variant(33, ua.VariantType.UInt16))
+                #await struct.write_value(dv)
+                print(f"ЗНАЧЕНИЕ={await struct.read_value()} доп { (await struct.read_data_value()).SourceTimestamp}")
 
              
                 await subscription.subscribe_data_change(node)
@@ -70,5 +73,5 @@ async def main():
 
 if __name__ == "__main__":
    
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.WARNING)
     asyncio.run(main())

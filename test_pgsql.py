@@ -5,8 +5,11 @@ import asyncio
 import logging
 from FarmClass import FarmPLC,FarmList
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI,Request
 from uvicorn.main import Server
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 
 original_handler = Server.handle_exit
 
@@ -37,6 +40,15 @@ Server.handle_exit = AppStatus.handle_exit
 #веб сервак
 #================
 app=FastAPI()
+templates=Jinja2Templates(directory="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/",response_class=HTMLResponse )
+async def index(request:Request):
+    context = {'request':request}
+    return templates.TemplateResponse("farminfo.html",context) 
+
+
 @app.get("/")
 async def root():
     return {"message": "Hello World"}
@@ -59,15 +71,30 @@ async def allfarminfo():
 
 @app.get("/farm/{name}")
 async def farminfo(name:str):
+    if farms.get_by_name(name):
             fr={}
             fr["id"]=farms.get_by_name(name).jconf["id"]
             fr["name"]=farms.get_by_name(name).name
             fr["connection"]=farms.get_by_name(name).connectionstatus
             vl={}
             for v in farms.get_by_name(name).Value:
-                 vl[farms.get_by_name(name).getTagByShort(v).name]=farms.get_by_name(name).getValueShort(v)
+                 vl[farms.get_by_name(name).getTagByShort(v).name]=farms.get_by_name(name).getTagByShort(v).get_dict()
             fr["values"]=vl            
             return {"farm":fr}
+    else:
+        return {"error":"not found"}
+@app.get("/point/{id}")
+async def gettagbybase(id:str):
+            for f in farms.farms:
+                if farms.get(f).getTagByBaseId(id):
+                    return farms.get(f).getTagByBaseId(id)          
+            return {"error":"not found"}
+@app.get("/sql/{id}")
+async def sqltest(id:str):
+            for f in farms.farms:
+                if farms.get(f).getTagByBaseId(id):
+                    return farms.get(f).getTagByBaseId(id).get_sql_string()          
+            return {"error":"not found"}
 
 
 
@@ -117,8 +144,9 @@ class ifarmPgSql:
     async def getpointsforfarm(self,farm)->list:
         """считывание списка точек, где 1 позиция  - identity имя точки, 2 позиция title описание"""
         if self.conn:
-                query= f"SELECT identity,scada_sensors.title title,\
-						scada_settings.title\
+                query= f"SELECT identity,scada_sensors.title stitle,\
+						scada_settings.title ftitle,\
+                        scada_sensors.id, scada_sensors.display_graphs\
                         FROM public.scada_sensors \
                         inner join scada on scada_id=scada.id \
                         inner join scada_settings on setting_id=scada_settings.id\
@@ -127,8 +155,9 @@ class ifarmPgSql:
                   		and scada_settings.title ='{farm}'\
 						order by scada_sensors.identity asc\
                             ;"
-
+                
                 s=await self.conn.fetch(query)
+           
         return s
 
         
@@ -170,13 +199,14 @@ async def setup():
                 "login":f"{js['opcEndpoint']['security']['userName']}",
                 "password":f"{js['opcEndpoint']['security']['password']}",
                 "prefix":"ns=4;s=",
-                "retprefix":f"{extract_point_name(points[0][0])[1] if points !=[] else ''}" #с 1 точки заберем префиксы для этого точки читаются выше
+                "retprefix":f"{extract_point_name(points[0]['identity'])[1] if points !=[] else ''}" #с 1 точки заберем префиксы для этого точки читаются выше
                  }
                 )
                 for p in points:
-                    shortpoint=extract_point_name(p[0])[0],p[1]
-                    farms.get(i).addpoint(shortpoint)            #добавление точек в подписку и конфигурации
-          
+                    shortpoint=extract_point_name(p['identity'])[0],p['stitle'],str(p['id']),p['display_graphs']
+                    farms.get(i).addpoint(shortpoint)   
+                           #добавление точек в подписку и конфигурации
+                    print(shortpoint)
         except KeyError as error: #ловушка на некорректную конфу в базе
             mylogger.warning(f"косяк в конфе фермы  {k[0]}, глюк в поле {error}" )
       
@@ -194,6 +224,24 @@ async def printfarms():
               farms.get(k).PrintValues()
             #await fr(1).WriteValueShort("GVL.AIArray.AI[0].AIData.Value",c)  
             await asyncio.sleep(1)     
+async def trends_loop():
+    while True:
+        await asyncio.sleep(60) 
+         # Подключение к существующей базе данных
+        connection=await asyncpg.connect(user="igor",
+                                        # пароль, который указали при установке PostgreSQL
+                                        password="adminsa",
+                                        host="10.10.2.152",
+                                        port="5432",
+                                        database="ifarm_scada")  
+        conn:asyncpg.connection.Connection = connection
+        
+        q=farms.generate_trends()
+        print(q)
+        await conn.execute(q)
+     
+       
+        await conn.close()
 
 async def setups():
     
@@ -204,17 +252,17 @@ config = uvicorn.Config(app, port=8000, log_level="info")
 server = uvicorn.Server(config) 
 
 async def main():
-        global farms
-
+ 
         tasks=[]
         await setups()
-        #tasks.append(asyncio.create_task(server.serve()))
+        tasks.append(asyncio.create_task(trends_loop()))
+
         for k in farms.farms:
               tasks.append(asyncio.create_task(farms.get(k).loop()))
         tasks.append(asyncio.create_task(AppStatus.terminate()))
         await server.serve()
         await asyncio.gather(*tasks)
-
+       
        # tasks.append(asyncio.create_task(printfarms()))
 
 if __name__ == "__main__":           

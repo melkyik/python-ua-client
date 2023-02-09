@@ -1,6 +1,43 @@
+@charset "UTF-8";
+:root {
+  --blue:#007bff;
+  --ggreen:#043b12;
+  --indigo:#6554C0;
+  --purple:#6f42c1;
+  --pink:#e83e8c;
+  --red:#FF5631;
+  --orange:#FFAB03;
+  --yellow:#EDA700;
+  --green:#50B83C;
+  --teal:#20c997;
+  --cyan:#6554C0;
+  --white:#fff;
+  --border:#CDCED0;
+  --gray:#405261;
+  --gray-dark:#343a40;
+  --primary:#007bff;
+  --secondary:#405261;
+  --success:#50B83C;
+  --info:#6554C0;
+  --warning:#EDA700;
+  --danger:#FF5631;
+  --light:#fff;
+  --dark:#162B4D;
+  --default:#DADCE0;
+  --breakpoint-xs:0;
+  --breakpoint-sm:576px;
+  --breakpoint-md:768px;
+  --breakpoint-lg:992px;
+  --breakpoint-xl:1200px;
+  --breakpoint-xxl:1400px;
+  --font-family-sans-serif:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";
+  --font-family-monospace:SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace
+ }
 h1 {
-    color: red;
+    border: 6px solid #24943A;
     text-align: center;
+    font-size: 22px;
+    font-weight: bold;
 }
 
 img {
@@ -9,13 +46,34 @@ img {
     margin-right: auto;
     width: 50%;
 }
+#tabletitle {
+  border: 3px double #0FA43C;
+  background: #24943A;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, serif;
+  font-size: 20px;
+  color: #000000;
+  font-style: normal;
+  font-variant: normal;
+  text-transform: none;
+  }
+
 
 table.greenTable {
-  font-family: Georgia, serif;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, serif;
   border: 6px solid #24943A;
   background-color: #D4EED1;
   width: 100%;
   text-align: center;
+}
+table.greenTable caption {
+   caption-side: top;
+   text-align: left;
+   padding: 10px 0;
+   font-size: 22px;
+   color: ggreen;
+   background: -moz-linear-gradient(top, #4cb972 0%, #3a9e4d 66%, #24943A 100%);
+   background: -webkit-linear-gradient(top, #4cb972 0%, #3a9e4d 66%, #24943A 100%);
+   background: linear-gradient(to bottom, #4cb972 0%, #3a9e4d 66%, #24943A 100%);
 }
 table.greenTable td, table.greenTable th {
   border: 1px solid #24943A;
@@ -24,7 +82,7 @@ table.greenTable td, table.greenTable th {
 table.greenTable tbody td {
   font-size: 13px;
 }
-table.greenTable thead {
+table.greenTable thead{
   background: #24943A;
   background: -moz-linear-gradient(top, #4cb972 0%, #3a9e4d 66%, #24943A 100%);
   background: -webkit-linear-gradient(top, #4cb972 0%, #3a9e4d 66%, #24943A 100%);

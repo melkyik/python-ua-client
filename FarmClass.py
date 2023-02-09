@@ -337,7 +337,7 @@ class FarmPLC:
                             #!!эта строка ниже нужна для отображения передачи с клиентов для проверки если не работает метод запроса
                             #for n in self.value: print(n,self.value[n], '\n ' ) 
                         await self.client.check_connection()  # отсюда вызывается исклюение об обрыве связи и запускается реконнект клиента 
-            except (ConnectionError, ua.UaError,asyncio.exceptions.TimeoutError) as error:
+            except (ConnectionError, ua.UaError,asyncio.exceptions.TimeoutError,OSError) as error:
                 mylogger.warning("%s-%s Reconnecting in 2 seconds",self.name,error)
                 self.connectionstatus='Timeout!'
                 await asyncio.sleep(2)

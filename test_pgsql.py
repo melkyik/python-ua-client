@@ -116,12 +116,12 @@ class ifarmPgSql:
         pass
     async def connect(self):
          # Подключение к существующей базе данных
-        self._connection= await asyncpg.connect(user="igor",
+        self._connection= await asyncpg.connect(user="sc",
                                         # пароль, который указали при установке PostgreSQL
-                                        password="adminsa",
-                                        host="10.10.2.152",
+                                        password="MIO54jklw2",
+                                        host="3.69.35.190",
                                         port="5432",
-                                        database="ifarm")
+                                        database="sc")
         self.conn:asyncpg.connection.Connection = self._connection
               
 #--------------------------------------------------------
@@ -228,17 +228,18 @@ async def trends_loop():
     while True:
         await asyncio.sleep(60) 
          # Подключение к существующей базе данных
-        connection=await asyncpg.connect(user="igor",
+        connection=await asyncpg.connect(user="python_scada",
                                         # пароль, который указали при установке PostgreSQL
-                                        password="adminsa",
-                                        host="10.10.2.152",
+                                        password="J)DSWj3",
+                                        host="3.72.44.203",
                                         port="5432",
-                                        database="ifarm_scada")  
+                                        database="python_scada")  
         conn:asyncpg.connection.Connection = connection
         
         q=farms.generate_trends()
         print(q)
         await conn.execute(q)
+        await conn.execute(''' COMMIT''')
      
        
         await conn.close()

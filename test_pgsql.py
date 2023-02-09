@@ -249,7 +249,7 @@ async def setups():
         await base.connect() 
         await setup()
         await base.close() 
-config = uvicorn.Config(app, port=8000, log_level="info")
+config = uvicorn.Config(app, host='0.0.0.0', port=8000, log_level="info")
 server = uvicorn.Server(config) 
 
 async def main():

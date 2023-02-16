@@ -14,7 +14,7 @@ mylogger = logging.getLogger("ifarm")
 class SubHandler:
   
     def __init__(self):
-        self.Value           =  {} #сопоставление адреса и данных подписки
+        self.Value:dict[str,DataChangeNotif]           =  {} #сопоставление адреса и данных подписки
         self.datachanged     = False
     """DataChangeNotification(<asyncua.common.subscription.SubscriptionItemData object at 0x000001D010B04F10>, 
         MonitoredItemNotification(ClientHandle=201, Value=DataValue(Value=Variant(Value=19.709999084472656, VariantType=<VariantType.Float: 10>, Dimensions=None, is_array=False), StatusCode_=StatusCode(value=0), SourceTimestamp=datetime.datetime(2023, 2, 8, 13, 58, 12, 245000), ServerTimestamp=datetime.datetime(2023, 2, 8, 13, 58, 12, 245000), SourcePicoseconds=None, ServerPicoseconds=None)))
@@ -38,12 +38,7 @@ class SubHandler:
 
     def get(self,s:str)-> DataChangeNotif:
         """возвращает данные точки подписки по ее id"""
-        try:
-            if isinstance(self.Value[str(s)],DataChangeNotif):
-                return self.Value[str(s)]
-        except(KeyError):
-                return None   
-    
+        return(self.Value.get(s))
 
 
 
@@ -352,19 +347,15 @@ class FarmPLC:
 class  FarmList:
     """класс со списком ферм для удобства поиска и обращения в списке"""
     def __init__(self,desc:str) -> None:
-        self.farms={}
+        self.farms:dict[str,FarmPLC]={}
         self.desc=str(desc)
 
     def __str__(self) -> str:
         return self.desc + str(len(self.farms))
     def get(self,id)-> FarmPLC:
         """возвращает ферму по ее id"""
-        try:
-      
-         if isinstance(self.farms[str(id)],FarmPLC):
-                return self.farms[str(id)]
-        except(KeyError):
-                return None      
+        return self.farms.get(str(id))
+       
           
     def add(self,jconf:dict={ "id":"1",
       "name":"PLC default",
@@ -383,6 +374,8 @@ class  FarmList:
       "prefix":"ns=4;s=",
       "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application." """
       self.farms[jconf["id"]] = FarmPLC(jconf)
+
+
     def get_by_name(self,name:str)->FarmPLC:
         """производит поиск и возвращает экземпляр FarmPLC по имени name """
         try:
@@ -393,6 +386,8 @@ class  FarmList:
         except (KeyError) as error:
                 mylogger.warning("get_by_name keyerror!  in list %s - %s",self.desc,error)
                 return None    
+
+                
     def generate_trends(self)->str:
         buf=''
         for k in self.farms:

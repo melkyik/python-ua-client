@@ -5,7 +5,6 @@ from FarmClass import FarmPLC,FarmList
 import asyncio
 
 #farms=dict()
-f=[]
 c=1
 farms=FarmList(desc="Список ферм №1")
 

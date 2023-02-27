@@ -10,7 +10,7 @@ from uvicorn.main import Server
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
-
+from logging.handlers import RotatingFileHandler
 original_handler = Server.handle_exit
 
 class AppStatus:
@@ -30,12 +30,23 @@ class AppStatus:
                 try:
                     await task
                 except asyncio.CancelledError:
-                     print("Task cancelled")
+                     mylogger.info("Task cancelled")
             await asyncio.sleep(0.1)
 Server.handle_exit = AppStatus.handle_exit
 
 #https://coderoad.ru/58133694/%D0%93%D1%80%D0%B0%D0%BC%D0%BE%D1%82%D0%BD%D0%BE%D0%B5-%D0%BE%D1%82%D0%BA%D0%BB%D1%8E%D1%87%D0%B5%D0%BD%D0%B8%D0%B5-uvicorn-starlette-app-%D1%81-websockets
 #https://stackoverflow.com/questions/56052748/python-asyncio-task-cancellation
+def smart_round(text, ndigits: int = 2) -> str:
+      
+        try:
+            if text in (True,False):
+                return str(text)
+            s=float(round(float(text), ndigits))
+            return s
+        except :
+            return str(text)
+
+
 ####=====================
 #веб сервак
 #================
@@ -45,8 +56,26 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/",response_class=HTMLResponse )
 async def index(request:Request):
-    context = {'request':request}
+    context = {'request':request, "farms":[]}
+    for k in farms.farms:
+            fr={}
+            fr["id"]=k
+            fr["name"]=farms.get(k).name
+            fr["connection"]=farms.get(k).connectionstatus
+            fr["URL"]=farms.get(k).URL
+            fr["values"]=[]
+            for v in farms.get(k).Value:
+                                    vl={}
+                                    vl["name"]=farms.get(k).getTagByShort(v).name
+                                    vl["address"]=farms.get(k).getTagByShort(v).addr
+                                    vl["value"]=farms.get(k).getValueShort(v)
+                                    fr["values"].append(vl)
+         
+            context["farms"].append(fr)   
+
+
     return templates.TemplateResponse("farminfo.html",context) 
+    
 
 
 @app.get("/")
@@ -100,13 +129,23 @@ async def sqltest(id:str):
 
 
 
-
-
-logging.basicConfig(level=logging.WARNING,
-                        format="%(asctime)s: %(message)s",
+#---------------------------------
+##настройка логгера
+#---------------------------------
+logging.basicConfig(level=logging.INFO,
+                        format="%(name)s - %(levelname)s - %(message)s",
                         datefmt=  '%Y-%m-%d %H:%M:%S')  
-mylogger = logging.getLogger("ifarm")
+mylogger = logging.getLogger(__name__)
 
+# Create a file handler for the main module logger
+file_handler = RotatingFileHandler("main.log", maxBytes=50000, backupCount=10,encoding="UTF8")
+file_handler.setLevel(logging.INFO)
+
+# Create a formatter for the main module file handler
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+mylogger.addHandler(file_handler)
+logging.getLogger("FarmClass").addHandler(file_handler)
 setupfarms:bool=False
 farms=FarmList("Список ферм из базы")
 """Список ферм класc FarmList"""
@@ -123,7 +162,7 @@ class ifarmPgSql:
                                         port="5432",
                                         database="sc")
         self.conn:asyncpg.connection.Connection = self._connection
-              
+        mylogger.info("Соединение с PostgreSQL установлено")      
 #--------------------------------------------------------
     async def close(self):   
             """разрыв соединения"""  
@@ -161,7 +200,7 @@ class ifarmPgSql:
         return s
 
         
-def extract_point_name(s)->list:
+def extract_point_name(s:str)->list:
     """считывает имя точки и парсит его на составляющие - префиксы и имя"""
     try:
 
@@ -188,7 +227,7 @@ async def setup():
         js= json.loads(j) #хз почему но первый вызов делает на выходе строку а второй только конвертит в словарь!
         try:
             points=await base.getpointsforfarm(k["title"]) #считаем список точек для этой фермы
-            print(f"Ферма {k['title']} {len(points)} точек")
+            mylogger.info(f"Ферма {k['title']} {len(points)} точек")
             #print(points)
             if points!=[]:
                 i+=1
@@ -206,11 +245,11 @@ async def setup():
                     shortpoint=extract_point_name(p['identity'])[0],p['stitle'],str(p['id']),p['display_graphs']
                     farms.get(i).addpoint(shortpoint)   
                            #добавление точек в подписку и конфигурации
-                    print(shortpoint)
+                   # print(shortpoint)
         except KeyError as error: #ловушка на некорректную конфу в базе
-            mylogger.warning(f"косяк в конфе фермы  {k[0]}, глюк в поле {error}" )
+            mylogger.warning(f"Косяк в конфе фермы  {k[0]}, глюк в поле {error}" )
       
-    print("сумма активных ферм:",len(farms.farms))
+    mylogger.info("сумма активных ферм: %s",len(farms.farms.keys()))
    
     return True
 
@@ -237,11 +276,9 @@ async def trends_loop():
         conn:asyncpg.connection.Connection = connection
         
         q=farms.generate_trends()
-        print(q)
+        #print(q)
         await conn.execute(q)
-        await conn.execute(''' COMMIT''')
-     
-       
+        await conn.execute(''' COMMIT''')    
         await conn.close()
 
 async def setups():
@@ -249,17 +286,17 @@ async def setups():
         await base.connect() 
         await setup()
         await base.close() 
-config = uvicorn.Config(app, host='0.0.0.0', port=8000, log_level="info")
+config = uvicorn.Config(app, host='0.0.0.0', port=8000, log_level="warning")
 server = uvicorn.Server(config) 
 
 async def main():
  
         tasks=[]
         await setups()
-        tasks.append(asyncio.create_task(trends_loop()))
+        #tasks.append(asyncio.create_task(trends_loop()))
 
         for k in farms.farms:
-              tasks.append(asyncio.create_task(farms.get(k).loop()))
+             tasks.append(asyncio.create_task(farms.get(k).loop()))
         tasks.append(asyncio.create_task(AppStatus.terminate()))
         await server.serve()
         await asyncio.gather(*tasks)

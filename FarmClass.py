@@ -3,6 +3,7 @@ from asyncua import Client, ua, Node
 from asyncua.common.subscription import DataChangeNotif
 from asyncua.ua.uatypes import DataValue
 import logging
+from logging.handlers import RotatingFileHandler
 import asyncio #https://github.com/FreeOpcUa/opcua-asyncio
 from prettytable import PrettyTable
 from datetime import datetime
@@ -10,7 +11,20 @@ from typing import Optional
 
 
 
-mylogger = logging.getLogger("ifarm")
+mylogger = logging.getLogger(__name__)
+external_logger = logging.getLogger('asyncua')
+external_logger.setLevel(logging.ERROR)
+
+# # Create a file handler for the main module logger
+# file_handler = RotatingFileHandler("main.log", maxBytes=2000, backupCount=10)
+# file_handler.setLevel(logging.INFO)
+
+# # Create a formatter for the main module file handler
+# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# file_handler.setFormatter(formatter)
+# # Add the file handler to the main module logger
+# mylogger.addHandler(file_handler)
+
 class SubHandler:
   
     def __init__(self):

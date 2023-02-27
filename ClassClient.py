@@ -21,7 +21,7 @@ async def printfarms(): #процедурка для вывода считаны
          global c
          while True:
             c=c+1
-            print("\033c", end='') 
+            #print("\033c", end='') 
             farms.get(1).PrintValues() 
             farms.get(2).PrintValues()
            # await fr(1).WriteValueShort("GVL.AIArray.AI[0].AIData.Value",c)  
@@ -36,7 +36,6 @@ async def main():
         await asyncio.gather(*tasks)
 
         
-logging.basicConfig(level=logging.WARNING) 
 
 if __name__ == "__main__":
         asyncio.run(main())

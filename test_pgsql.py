@@ -66,8 +66,10 @@ async def index(request:Request):
             fr["values"]=[]
             for v in farms.get(k).Value:
                                     vl={}
-                                    vl["name"]=farms.get(k).getTagByShort(v).name
-                                    vl["address"]=farms.get(k).getTagByShort(v).addr
+                                    tag=farms.get(k).getTagByShort(v)
+                                    vl["name"]=tag.name
+                                    vl["address"]=tag.addr
+                                    vl["status"]=tag.status
                                     vl["value"]=farms.get(k).getValueShort(v)
                                     fr["values"].append(vl)
          
@@ -288,7 +290,7 @@ async def trends_loop():
         conn:asyncpg.connection.Connection = connection
         
         q=farms.generate_trends()
-        #print(q)
+        mylogger.info("Trend writed") 
         await conn.execute(q)
         await conn.execute(''' COMMIT''')    
         await conn.close()
@@ -305,11 +307,12 @@ async def main():
     try:
         tasks=[]
         await setups()
-        #tasks.append(asyncio.create_task(trends_loop()))
+        
 
         for k in farms.farms:
              tasks.append(asyncio.create_task(farms.get(k).loop()))
         tasks.append(asyncio.create_task(AppStatus.terminate()))
+        tasks.append(asyncio.create_task(trends_loop()))
         await server.serve()
         await asyncio.gather(*tasks)
     except asyncio.exceptions.CancelledError:

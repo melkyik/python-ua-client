@@ -194,7 +194,7 @@ class FarmPLC:
             if res in (True,False):
                 return str(res)
             s=float(res)
-            return f"{s:.4}"
+            return f"{s:.2f}"
         except :
             return str(res)
          
@@ -351,9 +351,9 @@ class FarmPLC:
                             #for n in self.value: print(n,self.value[n], '\n ' ) 
                         await self.client.check_connection()  # отсюда вызывается исклюение об обрыве связи и запускается реконнект клиента 
             except (ConnectionError, ua.UaError,asyncio.exceptions.TimeoutError,OSError) as error:
-                mylogger.warning("%s-%s Reconnecting in 2 seconds",self.name,error)
+                mylogger.warning("%s-%s Reconnecting in 30 seconds",self.name,error)
                 self.connectionstatus='Timeout!'
-                await asyncio.sleep(2)
+                await asyncio.sleep(30)
      except(asyncio.exceptions.CancelledError)as  error:
         mylogger.info("%s-%s exit cycle ",self.name,error)
 

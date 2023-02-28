@@ -152,6 +152,8 @@ class FarmPLC:
         Добавляет точку по формату из начала списка 
         addresses[0]= имя точки, 
         addresses[1]= описание точки
+        addresses[2]= id в базе
+        addresses[3] = true - архивировать точку в тренд
         """
         s=self.prefix+self.retprefix+addresses[0]
         self.SubscribeNodes.append(s)

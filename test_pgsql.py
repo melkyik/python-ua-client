@@ -146,6 +146,8 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 file_handler.setFormatter(formatter)
 mylogger.addHandler(file_handler)
 logging.getLogger("FarmClass").addHandler(file_handler)
+
+
 setupfarms:bool=False
 farms=FarmList("Список ферм из базы")
 """Список ферм класc FarmList"""

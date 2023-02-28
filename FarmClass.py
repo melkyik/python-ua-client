@@ -38,7 +38,7 @@ class SubHandler:
         # например |var|WAGO 750-8212 PFC200 G2 2ETH RS.Application.PLC_PRG.counter
         #self.Value[str(node.nodeid.Identifier)]=data# обращаемся к точке по retadr не эффективно - будем искать точки по  полному адресу как ниже!
         self.Value[str(data.subscription_data.node)]=data 
-        
+       
         self.datachanged=True
         #print(val)
         
@@ -82,7 +82,8 @@ class PointTag:
         """ архивация точки """
         self.node:Node=None
         """ссылка на экземпляр Node """
-        
+        self.readed_node_full_name:str=None
+        """прочитанное полное имя точки из подписки """
 
          
  
@@ -341,6 +342,7 @@ class FarmPLC:
                                     buf.plcdate  =   self.handler.get(i).monitored_item.Value.SourceTimestamp
                                     buf.uatype   =   self.handler.get(i).monitored_item.Value.data_type
                                     buf.status   =   self.handler.get(i).monitored_item.Value.StatusCode.is_good()
+                                    buf.readed_node_full_name=str(self.handler.get(i).subscription_data.node)
                                   # передаем копию считаных данных в массив значений
                             self.handler.datachanged=False
                             self.handler.Value={}

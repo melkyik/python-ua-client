@@ -3,9 +3,9 @@ import asyncpg
 import json
 import asyncio
 import logging
-from FarmClass import FarmPLC,FarmList
+from FarmClass import FarmPLC,FarmList,PointTag
 import uvicorn
-from fastapi import FastAPI,Request
+from fastapi import FastAPI,Request,HTTPException
 from uvicorn.main import Server
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -111,13 +111,23 @@ async def farminfo(name:str):
             fr["values"]=vl            
             return {"farm":fr}
     else:
-        return {"error":"not found"}
+        raise HTTPException(
+             status_code=404,
+             detail=f"Farm '{name}' not found"
+        )
+
 @app.get("/point/{id}")
 async def gettagbybase(id:str):
+            tag:PointTag=None
             for f in farms.farms:
                 if farms.get(f).getTagByBaseId(id):
-                    return farms.get(f).getTagByBaseId(id)          
-            return {"error":"not found"}
+                    tag=farms.get(f).getTagByBaseId(id)          
+            if  tag==None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Point '{id}' not found"
+                    )
+            return tag
 @app.get("/sql/{id}")
 async def sqltest(id:str):
             for f in farms.farms:
@@ -292,7 +302,7 @@ config = uvicorn.Config(app, host='0.0.0.0', port=8000, log_level="warning")
 server = uvicorn.Server(config) 
 
 async def main():
- 
+    try:
         tasks=[]
         await setups()
         #tasks.append(asyncio.create_task(trends_loop()))
@@ -302,7 +312,9 @@ async def main():
         tasks.append(asyncio.create_task(AppStatus.terminate()))
         await server.serve()
         await asyncio.gather(*tasks)
-       
+    except asyncio.exceptions.CancelledError:
+         mylogger.info("exit by cancel") 
+         return 0  
        # tasks.append(asyncio.create_task(printfarms()))
 
 if __name__ == "__main__":           

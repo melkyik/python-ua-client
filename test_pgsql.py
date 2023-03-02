@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from logging.handlers import RotatingFileHandler
+from typing import Optional
 original_handler = Server.handle_exit
 
 class AppStatus:
@@ -137,10 +138,59 @@ async def sqltest(id:str):
                     return farms.get(f).getTagByBaseId(id).get_sql_string()          
             return {"error":"not found"}
 
+@app.get("/browse/{id}/{node}")
+async def browsetag(id:str, node:str|None=None):
+    farm=farms.get_by_name(id)
+    if not farm:
+        raise HTTPException(
+                    status_code=404,
+                    detail=f"farm '{id}' not found"
+                    )
+    if node=='root':
+       bufnode=farm.client.nodes.root
 
+    else:
+        bufnode=farm.client.get_node(node)
+    if not bufnode:
+        raise HTTPException(
+                    status_code=404,
+                    detail=f"node '{node}' not found"
+                    )
+    
+    res=await farm.browse_nodes(node=bufnode,level=0, maxbrowselevel=0)
+    return   {
+           'strchildren':res['strchildren']
 
+    }
 
+   
+@app.get("/hbrowse/{id}/{node}")
+async def hbrowsetag(request:Request,id:str, node:str|None=None):
+    context = {'request':request, "points":[]}
+    farm=farms.get_by_name(id)
+    if not farm:
+        raise HTTPException(
+                    status_code=404,
+                    detail=f"farm '{id}' not found"
+                    )
+    if node=='root':
+       bufnode=farm.client.nodes.root
 
+    else:
+        bufnode=farm.client.get_node(node)
+    if not bufnode:
+        raise HTTPException(
+                    status_code=404,
+                    detail=f"node '{node}' not found"
+                    )
+
+    res=await farm.browse_nodes(node=bufnode,level=0, maxbrowselevel=0)
+    result=['']
+    context["farm"]=id
+    for child in res['strchildren']:
+        context["points"].append(child)
+    print(result)
+    return templates.TemplateResponse("farmbrowse.html",context) 
 #---------------------------------
 ##настройка логгера
 #---------------------------------

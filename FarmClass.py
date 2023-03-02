@@ -147,6 +147,7 @@ class FarmPLC:
       self.name     =           str(self.jconf['name'] )
       self.URL      =           str(self.jconf['URL'])
       self.SubscribeNodes    =  list() #список точек для подписки, остальные опрашиваются по общему опросу
+      self._maxbrowselevel=1
  
     def addpoint(self,addresses:list):
         """
@@ -357,6 +358,40 @@ class FarmPLC:
      except(asyncio.exceptions.CancelledError)as  error:
         mylogger.info("%s-%s exit cycle ",self.name,error)
 
+    async def browse_nodes(self, node: Node,level:int=0,maxbrowselevel:int=0):
+        """
+        возвращает тип ноды и ее дочерние ноды. level - уровень поиска рекурсии, maxbrowselevel макс уровень вложености
+        """
+        node_class = await node.read_node_class()
+        children = []
+        child:Node
+        strchildren:list[str]=[]
+        #print ("node=",node)
+        for child in await node.get_children():
+            if await child.read_node_class() in [ua.NodeClass.Object, ua.NodeClass.Variable]:
+                if level < maxbrowselevel:
+                    children.append(await self.browse_nodes(child,level=level+1,maxbrowselevel=maxbrowselevel))
+                else:
+                    children.append(child)  
+
+                strchildren.append(str(child))
+               #print ("child=",child)
+        if node_class != ua.NodeClass.Variable:
+            var_type = None
+        else:
+            try:
+                var_type = (await node.read_data_type_as_variant_type()).value
+            except ua.UaError:
+                mylogger.warning('Node Variable Type could not be determined for %r', node)
+                var_type = None
+        return {
+            'id': str(node),
+            'name': (await node.read_display_name()).Text,
+            'cls': node_class.value,
+            'strchildren':strchildren,
+            'children':children,
+            'type': var_type,
+        }
  ##
  #класс со списком ферм для удобства поиска и обращения в списке
  # 

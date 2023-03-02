@@ -139,7 +139,7 @@ async def sqltest(id:str):
             return {"error":"not found"}
 
 @app.get("/browse/{id}/{node}")
-async def browsetag(id:str, node:str|None=None):
+async def browsetag(id:str, node:str):
     farm=farms.get_by_name(id)
     if not farm:
         raise HTTPException(
@@ -165,7 +165,7 @@ async def browsetag(id:str, node:str|None=None):
 
    
 @app.get("/hbrowse/{id}/{node}")
-async def hbrowsetag(request:Request,id:str, node:str|None=None):
+async def hbrowsetag(request:Request,id:str, node:str):
     context = {'request':request, "points":[]}
     farm=farms.get_by_name(id)
     if not farm:

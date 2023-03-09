@@ -7,7 +7,7 @@ from logging.handlers import RotatingFileHandler
 import asyncio #https://github.com/FreeOpcUa/opcua-asyncio
 from prettytable import PrettyTable
 from datetime import datetime
-from typing import Optional
+from typing import Optional,List,Dict
 
 
 
@@ -371,6 +371,11 @@ class FarmPLC:
      except(asyncio.exceptions.CancelledError)as  error:
         mylogger.info("%s-%s exit cycle ",self.name,error)
 
+
+#---------------------------------------------------------------
+
+
+
     async def browse_nodes(self, node: Node,level:int=0,maxbrowselevel:int=0):
         """
         возвращает тип ноды и ее дочерние ноды. level - уровень поиска рекурсии, maxbrowselevel макс уровень вложености
@@ -379,13 +384,14 @@ class FarmPLC:
         children = []
         child:Node
         strchildren:list[str]=[]
+        typedict:Dict[str,str]={}
         for child in await node.get_children():
             if await child.read_node_class() in [ua.NodeClass.Object, ua.NodeClass.Variable]:
                 if level < maxbrowselevel:
                     children.append(await self.browse_nodes(child,level=level+1,maxbrowselevel=maxbrowselevel))
                 else:
                     children.append(child)  
-
+                    typedict[str(child)]= await child.read_node_class() 
                 strchildren.append(str(child))
         if node_class != ua.NodeClass.Variable:
             var_type = None
@@ -395,13 +401,16 @@ class FarmPLC:
             except ua.UaError:
                 mylogger.warning('Node Variable Type could not be determined for %r', node)
                 var_type = None
+
         return {
             'id': str(node),
             'name': (await node.read_display_name()).Text,
             'cls': node_class.value,
             'strchildren':strchildren,
+            'typedict':typedict,
             'children':children,
             'type': var_type,
+
         }
  ##
  #класс со списком ферм для удобства поиска и обращения в списке

@@ -2,7 +2,7 @@ from pydantic import BaseModel,Field
 from datetime import datetime
 from typing import Optional,List,Dict,Any
 
-class Value(BaseModel):
+class Point(BaseModel):
     name: str =Field(...,description="Имя точки")
     baseId: str = Field(...,description="ID точки в базе")
     addr: str = Field(...,description="Короткий адрес точки в базе")
@@ -18,5 +18,5 @@ class RespFarm(BaseModel):
     id: str =       Field(...,description="ID фермы")
     name: str =     Field(...,description="имя фермы")
     Сonnection: str =Field(...,description="Статус подключения")
-    values: Dict[str,Value]
+    values: Dict[str,Point]
    

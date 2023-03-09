@@ -12,7 +12,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from logging.handlers import RotatingFileHandler
 from typing import Optional,Union,List
-from models import RespFarm
+
 
 
 original_handler = Server.handle_exit
@@ -182,11 +182,10 @@ async def browsetag(id:str, node:str):
 #------------------------------------------------------
 #/hbrowse/{id}/{node}
 #------------------------------------------------------
-   
 @app.get("/hbrowse/{id}/{node}")
 async def hbrowsetag(request:Request,id:str, node:str):
     """Браузер дочерних нодов {node} на заданном обьекте ID в виде ccaлок HTML"""
-    context = {'request':request, "points":[]}
+    context = {'request':request, "points":{}}
     farm=farms.get_by_name(id)
     if not farm:
         raise HTTPException(
@@ -205,12 +204,15 @@ async def hbrowsetag(request:Request,id:str, node:str):
                     )
 
     res=await farm.browse_nodes(node=bufnode,level=0, maxbrowselevel=0)
-    result=['']
     context["farm"]=id
-    for child in res['strchildren']:
-        context["points"].append(child)
+   # for child in res['strchildren']:
+   #     context["points"].append(child)
+    context["points"]=res['typedict']
     return templates.TemplateResponse("farmbrowse.html",context) 
-
+#------------------------------------------------------
+#/hbrowse/{id}/{node}
+#------------------------------------------------------
+   
 @app.post("/write/{baseid}/{value}")
 async def writeval( baseid:str,value:str,auth:Union[str, None]= Header(default=None,alias="Auth")):
     """Запись значения точки по ее BaseID"""

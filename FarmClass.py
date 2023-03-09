@@ -229,44 +229,57 @@ class FarmPLC:
         возвращает обьект Node по короткому адресу читая из сервера 
         """
         
-        if self.getTagByShort(short).node:
-            return self.getTagByShort(short).node
-        else:
-            self.getTagByShort(short).node =self.client.get_node(self.prefix+self.retprefix+short)
-            return self.getTagByShort(short).node 
+        #if self.getTagByShort(short).node:
+        #    return self.getTagByShort(short).node
+       # else:
+        self.getTagByShort(short).node =self.client.get_node(self.prefix+self.retprefix+short)
+        return self.getTagByShort(short).node 
 
     def _getNodeShort_TA(self,short)->Node:
         """
         возвращает обьект Node по короткому адресу читая из списка точек, обновленных подпиской 
         """
         return self.getTagByShort(short).node
-#--------------------------------------------------------
-    async def WriteValueShort(self,short,val):
+#--------------------------------------------------------           
+    async def WriteValueShort(self,short,val)->bool:
         """
         производит запись значения по адресу, предварительно определив ее тип для корректного преобразования типа
         """
         if self.connectionstatus == 'Connected':
-            tag=self.getTagByShort(short)  
+            tag=self.getTagByShort(short)
             if not tag:                         #бывает надо записать точку которой нет в подписке пока пусть будет это условие. оно создаст новую точку в словаре
                 self.Value[short]=PointTag(short,short) # позже лучше это удалить
                 tag=self.Value[short]
-      
+
             try:
-                await self.client.check_connection()                
+
+                await self.client.check_connection()
                 writenode=  self.getNodeShort(short)
-                self.getValueShort
-                if not (type(tag.uatype)==ua.VariantType): #тип точки лучше сохранить тк он точно не будет менятся
-                    tag.uatype=await writenode.read_data_type_as_variant_type() #произведем чтение типа данных с OPC
+                #mylogger.warning("запись %s тип %s значение %s",writenode, str(tag.uatype),val)
+                #if not (type(tag.uatype)==ua.VariantType): #тип точки лучше сохранить тк он точно не будет менятся
+                tag.uatype=await writenode.read_data_type_as_variant_type() #произведем чтение типа данных с OPC
                 if (type(tag.uatype)==ua.VariantType): #если уже записан тип в переменную - читать не обязательно
-                    dv = ua.DataValue(ua.Variant(val,tag.uatype)) #формируем значение особого типа для передачи на opc
+                    mylogger.warning("запись %s тип %s значение %s",short, str(tag.uatype),val)
+                    if tag.uatype==ua.VariantType.Float:
+                        dv = ua.DataValue(ua.Variant(float(val),tag.uatype)) #формируем значение особого типа для передачи на opc
+                    elif  tag.uatype in [ua.VariantType.Int16,ua.VariantType.Int32,ua.VariantType.Int64,ua.VariantType.UInt16,ua.VariantType.UInt32,   ua.VariantType.UInt64 ]:
+                        dv = ua.DataValue(ua.Variant(int(val),tag.uatype)) #формируем значение особого типа для передачи на opc
+                    elif tag.uatype ==ua.VariantType.Boolean:
+                         dv = ua.DataValue(ua.Variant(bool(val),tag.uatype))
+                    elif tag.uatype ==ua.VariantType.String:
+                        dv = ua.DataValue(ua.Variant(str(val),tag.uatype))
+                    else :
+                        mylogger.warning("ошибка неизвестный тип %s! %s",tag.uatype,short)
                     await writenode.write_value(dv)#произведем запись
             except (Exception, ua.UaError) as error:
-                mylogger.warning("ошибка записи %s! %s",short,error) 
+                mylogger.warning("ошибка записи %s! %s",short,error)
+                return False
             else:
                 mylogger.debug(f"значение записано {self.getTagByShort(short).addr} {self.getTagByShort(short).oldval} -> {val}")
                 await self.updatevalue(short)
+                return True
 
-  #--------------------------------------------------------           
+
     async def updatevalue(self,short)->str:
         """для обновления значения по адресу без учета подписки
         """
@@ -366,7 +379,6 @@ class FarmPLC:
         children = []
         child:Node
         strchildren:list[str]=[]
-        #print ("node=",node)
         for child in await node.get_children():
             if await child.read_node_class() in [ua.NodeClass.Object, ua.NodeClass.Variable]:
                 if level < maxbrowselevel:
@@ -375,7 +387,6 @@ class FarmPLC:
                     children.append(child)  
 
                 strchildren.append(str(child))
-               #print ("child=",child)
         if node_class != ua.NodeClass.Variable:
             var_type = None
         else:

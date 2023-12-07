@@ -9,7 +9,16 @@ from prettytable import PrettyTable
 from datetime import datetime
 from typing import Optional,List,Dict
 
+def extract_point_name(s:str)->list:
+    """считывает имя точки и парсит его на составляющие - префиксы и имя"""
+    try:
 
+        if s.find('RS.Application.'):
+            return s[s.find('RS.Application.')+15:],s[s.find("|var|"):s.find('RS.Application.')+15],"ns=4;s="
+        else:
+            return [s,'','']
+    except:
+        return [s,'','']
 
 mylogger = logging.getLogger(__name__)
 external_logger = logging.getLogger('asyncua')
@@ -417,7 +426,7 @@ class FarmPLC:
  # 
  # 
  #                
-class  FarmList:
+class  FarmList_:
     """класс со списком ферм для удобства поиска и обращения в списке"""
     def __init__(self,desc:str) -> None:
         self.farms:dict[str,FarmPLC]={}
@@ -468,8 +477,92 @@ class  FarmList:
                 buf+=self.get(k).getTagByShort(i).get_sql_string()
         return buf
 
+class FarmList(dict[str,FarmPLC]):
+   #def __init__(self, *args, **kwargs):            
+    #    super().__init__()  
+    """переопределяет класс Dict;"""
+
+    def get(self,id)-> FarmPLC:
+        """возвращает ферму по ее id"""
+        return super().get(str(id))   
+    def add(self,jconf:dict={ "id":"1",
+    "name":"PLC default",
+    "URL":"opc.tcp://10.10.2.244:4840",
+    "login":"admin",
+    "password":"wago",
+    "prefix":"ns=4;s=",
+    "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application."
+    }): 
+          
+        try:
+            buf=FarmPLC(jconf)  
+            mylogger.info(f"Farm readed {buf.jconf['id']} {buf.name}")
+            self[jconf['id']]=buf
+        except:
+            mylogger.error(f" cant read json {jconf}")
 
 
+    def get_by_name(self,name:str)->FarmPLC:
+        """производит поиск и возвращает экземпляр FarmPLC по имени name """
+        try:
+            for k in self:
+                if self[k].name == name:
+                    return self.get(k)
+            mylogger.warning("%s Farm isnt found! in list %s",name,self)
+        except (KeyError) as error:
+                mylogger.warning("get_by_name keyerror!  in list %s - %s",self,error)
+                return None
+    def generate_trends(self)->str:
+        buf=''
+        for k in self:
+            for i in self.get(k).Value:
+                buf+=self.get(k).getTagByShort(i).get_sql_string()
+        return buf          
+
+
+class BrowseDict(dict):
+    "словарь для удобной работы с вложеными элементами"
+    def __init__(self, input_dict):
+        super().__init__(input_dict)
+
+    def get_child(self, path:str):
+        keys = path.split('.')
+        current_data = self
+        for key in keys:
+            if '[' in key and ']' in key:
+                index_start = key.index('[')
+                index_end = key.index(']')
+                index = int(key[index_start + 1:index_end])
+                key = key[:index_start]
+                if isinstance(current_data.get(key), list) and index < len(current_data.get(key)):
+                    current_data = current_data[key][index]
+                else:
+                    return None
+            elif key in current_data:
+                current_data = current_data[key]
+            else:
+                return None
+        return current_data
+    
+    def find_substring_path(self, substring):
+        def search_path(current_data, current_path):
+            if isinstance(current_data, dict):
+                for key, value in current_data.items():
+                    new_path = f"{current_path}.{key}" if current_path else key
+                    result = search_path(value, new_path)
+                    if result:
+                        return result
+            elif isinstance(current_data, list):
+                for i, item in enumerate(current_data):
+                    new_path = f"{current_path}[{i}]"
+                    result = search_path(item, new_path)
+                    if result:
+                        return result
+            elif isinstance(current_data, str) and substring in current_data:
+                return current_path, current_data
+            return None
+
+        return search_path(self, "")
 
 
 

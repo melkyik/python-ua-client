@@ -3,7 +3,7 @@ import asyncpg
 import json
 import asyncio
 import logging
-from FarmClass import FarmPLC,FarmList,PointTag
+from FarmClass import FarmPLC,FarmList,PointTag,extract_point_name
 import uvicorn
 from fastapi import FastAPI,Request,HTTPException,Header
 from uvicorn.main import Server
@@ -217,7 +217,7 @@ async def hbrowsetag(request:Request,id:str, node:str):
 async def writeval( baseid:str,value:str,auth:Union[str, None]= Header(default=None,alias="Auth")):
     """Запись значения точки по ее BaseID"""
     if not ((baseid==None) or  (value==None)):
-        for f in farms.farms:
+        for f in farms:
             point=farms.get(f).getTagByBaseId(baseid)
             if point:
                 result =await farms.get(f).WriteValueShort(point.addr,value)
@@ -253,7 +253,7 @@ logging.getLogger("FarmClass").addHandler(file_handler)
 
 
 setupfarms:bool=False
-farms=FarmList("Список ферм из базы")
+farms=FarmList()
 """Список ферм класc FarmList"""
 class ifarmPgSql: 
     """класс определяет подключение к субд PostgreSql"""
@@ -305,17 +305,6 @@ class ifarmPgSql:
            
         return s
 
-        
-def extract_point_name(s:str)->list:
-    """считывает имя точки и парсит его на составляющие - префиксы и имя"""
-    try:
-
-        if s.find('RS.Application.'):
-            return s[s.find('RS.Application.')+15:],s[s.find("|var|"):s.find('RS.Application.')+15],"ns=4;s="
-        else:
-            return [s,'','']
-    except:
-        return [s,'','']
 
 
 
@@ -355,7 +344,7 @@ async def setup():
         except KeyError as error: #ловушка на некорректную конфу в базе
             mylogger.warning(f"Косяк в конфе фермы  {k[0]}, глюк в поле {error}" )
       
-    mylogger.info("сумма активных ферм: %s",len(farms.farms.keys()))
+    mylogger.info("сумма активных ферм: %s",len(farms.keys()))
    
     return True
 
@@ -393,7 +382,7 @@ async def main():
         await setups()
         
 
-        for k in farms.farms:
+        for k in farms:
              tasks.append(asyncio.create_task(farms.get(k).loop()))
         tasks.append(asyncio.create_task(AppStatus.terminate()))
         tasks.append(asyncio.create_task(trends_loop()))

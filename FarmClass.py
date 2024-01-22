@@ -1,4 +1,5 @@
 import json
+from icecream import ic
 from asyncua import Client, ua, Node
 from asyncua.common.subscription import DataChangeNotif
 from asyncua.ua.uatypes import DataValue
@@ -7,7 +8,9 @@ from logging.handlers import RotatingFileHandler
 import asyncio #https://github.com/FreeOpcUa/opcua-asyncio
 from prettytable import PrettyTable
 from datetime import datetime
-from typing import Optional,List,Dict
+from typing import Optional,List,Dict,Any
+import copy
+from sqlalchemy import URL
 
 def extract_point_name(s:str)->list:
     """считывает имя точки и парсит его на составляющие - префиксы и имя"""
@@ -85,7 +88,7 @@ class PointTag:
         """ статус точки """
         self.name=name
         """ имя точки """
-        self.plcdate=None
+        self.plcdate:datetime=None
         """ время обновления точки """
         self.archve=archive
         """ архивация точки """
@@ -136,6 +139,12 @@ class FarmPLC:
       "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application."
       },
     """
+    bd_URL:URL=None
+    "коннект к бд mysql"
+    bd_logfilter:str=None
+    "фильтр таблицы message_log"
+
+    
     def __init__(self,jconf:dict={ "id":"1",
       "name":"PLC default",
       "URL":"opc.tcp://10.10.2.244:4840",
@@ -146,7 +155,7 @@ class FarmPLC:
       },log=False):
       self.close=False
       #инициализация и заполнение первичными данными из конфигурационного файла
-      self.Value               =  {} #сопоставление короткого адреса и текущего значения, словарь текущих значений 
+      self.Value:dict[str,PointTag]             =  {} #сопоставление короткого адреса и текущего значения, словарь текущих значений 
       self.jconf    =           jconf.copy()
       #print(self.jconf)
       self.prefix   =           str(self.jconf['prefix']) #префикс точек списка подписки
@@ -231,6 +240,12 @@ class FarmPLC:
             for i in self.Value:
                 if (self.prefix+self.retprefix+i)==fulladr:
                     return self.Value[i]
+            return None
+    def getPointByName(self,name)->PointTag:
+            """возвращает точку по ее имени """  
+            for i in self.Value:
+                if self.getTagByShort(i).name==name:
+                    return self.getTagByShort(i)
             return None
 #--------------------------------------------------------
     def getNodeShort(self,short)->Node:
@@ -323,11 +338,12 @@ class FarmPLC:
         """
         return f"{self.name} {self.URL}"
     
-    def PrintValues(self,fields:list=[]):
+    def PrintValues(self,points:list):
         """передаем список точек для печати или напечатаем все по умолчанию"""
         t=PrettyTable(["Point name","Value"])
         for x in self.Value:
-             t.add_row([self.getTagByShort(x).name,self.getValueShort(x)])#)
+             if (x in points) or (points is None): 
+                t.add_row([self.getTagByShort(x).name,self.getValueShort(x)])#)
         print(self.jconf["name"], self.connectionstatus)
         print(t) 
     
@@ -336,7 +352,7 @@ class FarmPLC:
 
     #--------------------------------------------------------  
     async def loop(self):
-     """метод для зацикливания опроса, """
+     """метод для зацикливания опроса подписки """
      try:
         while True:
             self.handler = SubHandler() #указатель на класс обработки подписки
@@ -354,7 +370,7 @@ class FarmPLC:
                     queuesize=50, )
          
                     while True: #цикл опроса изменения подписки 
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(0.5)
                         if self.handler.datachanged:
                             for i in self.handler.Value:
                                 buf=self.getPointByFullAddr(i)
@@ -386,14 +402,12 @@ class FarmPLC:
 
 
     async def browse_nodes(self, node: Node,level:int=0,maxbrowselevel:int=0):
-        """
-        возвращает тип ноды и ее дочерние ноды. level - уровень поиска рекурсии, maxbrowselevel макс уровень вложености
-        """
+        "возвращает тип ноды и ее дочерние ноды. level - уровень поиска рекурсии, maxbrowselevel макс уровень вложености"
         node_class = await node.read_node_class()
         children = []
         child:Node
         strchildren:list[str]=[]
-        typedict:Dict[str,str]={}
+        typedict:dict[str,str]={}
         for child in await node.get_children():
             if await child.read_node_class() in [ua.NodeClass.Object, ua.NodeClass.Variable]:
                 if level < maxbrowselevel:
@@ -421,61 +435,69 @@ class FarmPLC:
             'type': var_type,
 
         }
+    
+    def get_filtered_list_of_shorts(self, search_string: str = "") -> list[str]:
+        "возвращает короткие адреса по фильтру"
+        return [self.Value[p].addr for p in self.Value if search_string in self.Value[p].name] 
+    
+    def get_filtered_list_of_names(self, search_string: str = "") -> list[str]:
+        "возвращает имена точек по фильтру"
+        return [self.Value[p].name for p in self.Value if search_string in self.Value[p].name] 
  ##
  #класс со списком ферм для удобства поиска и обращения в списке
  # 
  # 
  #                
-class  FarmList_:
-    """класс со списком ферм для удобства поиска и обращения в списке"""
-    def __init__(self,desc:str) -> None:
-        self.farms:dict[str,FarmPLC]={}
-        self.desc=str(desc)
+# class  FarmList_: 
+#     """класс со списком ферм для удобства поиска и обращения в списке"""
+#     def __init__(self,desc:str) -> None:
+#         self.farms:dict[str,FarmPLC]={}
+#         self.desc=str(desc)
 
-    def __str__(self) -> str:
-        return self.desc + str(len(self.farms))
-    def get(self,id)-> FarmPLC:
-        """возвращает ферму по ее id"""
-        return self.farms.get(str(id))
+#     def __str__(self) -> str:
+#         return self.desc + str(len(self.farms))
+#     def get(self,id)-> FarmPLC:
+#         """возвращает ферму по ее id"""
+#         return self.farms.get(str(id))
        
           
-    def add(self,jconf:dict={ "id":"1",
-      "name":"PLC default",
-      "URL":"opc.tcp://10.10.2.244:4840",
-      "login":"admin",
-      "password":"wago",
-      "prefix":"ns=4;s=",
-      "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application."
-      }):
-      """добавляет ферму в список на ввводе нужно указать
-      jconf:dict={ "id":"1",
-      "name":"PLC default",
-      "URL":"opc.tcp://10.10.2.244:4840",
-      "login":"admin",
-      "password":"wago",
-      "prefix":"ns=4;s=",
-      "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application." """
-      self.farms[jconf["id"]] = FarmPLC(jconf)
+#     def add(self,jconf:dict={ "id":"1",
+#       "name":"PLC default",
+#       "URL":"opc.tcp://10.10.2.244:4840",
+#       "login":"admin",
+#       "password":"wago",
+#       "prefix":"ns=4;s=",
+#       "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application."
+#       }):
+#       """добавляет ферму в список на ввводе нужно указать
+#       jconf:dict={ "id":"1",
+#       "name":"PLC default",
+#       "URL":"opc.tcp://10.10.2.244:4840",
+#       "login":"admin",
+#       "password":"wago",
+#       "prefix":"ns=4;s=",
+#       "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application." """
+#       self.farms[jconf["id"]] = FarmPLC(jconf)
 
 
-    def get_by_name(self,name:str)->FarmPLC:
-        """производит поиск и возвращает экземпляр FarmPLC по имени name """
-        try:
-            for k in self.farms:
-                if self.get(k).name == name:
-                    return self.get(k)
-            mylogger.warning("%s Farm isnt found! in list %s",name,self.desc)
-        except (KeyError) as error:
-                mylogger.warning("get_by_name keyerror!  in list %s - %s",self.desc,error)
-                return None    
+#     def get_by_name(self,name:str)->FarmPLC:
+#         """производит поиск и возвращает экземпляр FarmPLC по имени name """
+#         try:
+#             for k in self.farms:
+#                 if self.get(k).name == name:
+#                     return self.get(k)
+#             mylogger.warning("%s Farm isnt found! in list %s",name,self.desc)
+#         except (KeyError) as error:
+#                 mylogger.warning("get_by_name keyerror!  in list %s - %s",self.desc,error)
+#                 return None    
 
                 
-    def generate_trends(self)->str:
-        buf=''
-        for k in self.farms:
-            for i in self.get(k).Value:
-                buf+=self.get(k).getTagByShort(i).get_sql_string()
-        return buf
+#     def generate_trends(self)->str:
+#         buf=''
+#         for k in self.farms:
+#             for i in self.get(k).Value:
+#                 buf+=self.get(k).getTagByShort(i).get_sql_string()
+#         return buf
 
 class FarmList(dict[str,FarmPLC]):
    #def __init__(self, *args, **kwargs):            
@@ -517,11 +539,53 @@ class FarmList(dict[str,FarmPLC]):
         for k in self:
             for i in self.get(k).Value:
                 buf+=self.get(k).getTagByShort(i).get_sql_string()
-        return buf          
+        return buf   
 
 
+# def expand_list(j,keyword:str,rng=(0,2))->Any:
+#     def has_rec_keyword(value, keyword):
+#         """проверка условия что префикс есть в значении или подзначениях и с ним нужно работать"""
+#         if isinstance(value, str) and keyword in value:
+#             return True
+#         elif isinstance(value, dict):
+#             return any(has_rec_keyword(sub_value, keyword) for sub_value in value.values())
+#         elif isinstance(value, list):
+#             return any(has_rec_keyword(sub_value, keyword) for sub_value in value)
+#         return False  
+    
+#     if  isinstance(j, str) and has_rec_keyword(j, keyword):
+#         return [j.replace(keyword, str(i)) for i in range(rng[0], rng[1] + 1)]    
+    
+#     if isinstance(j, dict) and has_rec_keyword(j, keyword):
+#         duplicated_dict = copy.deepcopy(j)
+#         for key, value in duplicated_dict.items():
+#             if isinstance(value, str) and keyword in value :
+#                 duplicated_dict[key] = expand_list(value,keyword, rng)
+#             elif isinstance(value, dict) and has_rec_keyword(value, keyword):
+#                 duplicated_dict[key] = []
+#                 for _ in range(rng[0], rng[1] + 1):
+#                     new_dict = copy.deepcopy(value)
+#                     for sub_key, sub_value in new_dict.items():
+#                         if isinstance(sub_value, str) and keyword in sub_value:
+#                             new_dict[sub_key] = sub_value.replace(keyword, str(_))
+#                     duplicated_dict[key].append(new_dict)
+            
+#         return duplicated_dict
+    
+#     if  isinstance(j, list):
+#         return [expand_list(value,keyword, rng) for value in j]
+#     return j  
+ 
+ 
+ 
+ 
+ ##
+ #"словарь для удобной работы с вложеными элементами"
+ # 
+ # 
+ #         
 class BrowseDict(dict):
-    "словарь для удобной работы с вложеными элементами"
+    "словарь для удобной работы с вложеными элементами для словаря конфигурации фермы "
     def __init__(self, input_dict):
         super().__init__(input_dict)
 
@@ -563,6 +627,87 @@ class BrowseDict(dict):
             return None
 
         return search_path(self, "")
+    
+    def get_values(self,  find_key="", nested=True):
+        "выводит список точек с ключом find key"
+        values = []
+        found_key = False
+
+        def explore_dict(d, prefix=""):
+            nonlocal found_key
+            if isinstance(d, dict):
+                for key, value in d.items():
+                    current_key = f"{prefix}.{key}" if prefix else key
+                    if isinstance(value, str):
+                        if found_key or not find_key or (find_key and key == find_key):
+                            values.append((current_key, value))
+                    if nested and isinstance(value, (dict, list)):
+                        explore_dict(value, current_key)
+                    if key == find_key:
+                        found_key = True
+                        explore_dict(value, current_key)
+                        return 
+            elif isinstance(d, list):
+                for i, item in enumerate(d):
+                    explore_dict(item, f"{prefix}[{i}]" if prefix else f"[{i}]")
+            elif isinstance(d, str):
+                if found_key or not find_key :
+                    values.append((prefix, d))
+        explore_dict(self)
+        return values
+
+
+    
+   
+def extract_prefix(d)->dict:
+    "преобразует префиксы конфигурации в развернутые списки внутри словаря"
+    def expand_list(j,keyword:str,rng=(0,2))->Any:
+        def has_rec_keyword(value, keyword):
+            """проверка условия что префикс есть в значении или подзначениях и с ним нужно работать"""
+            if isinstance(value, str) and keyword in value:
+                return True
+            elif isinstance(value, dict):
+                return any(has_rec_keyword(sub_value, keyword) for sub_value in value.values())
+            elif isinstance(value, list):
+                return any(has_rec_keyword(sub_value, keyword) for sub_value in value)
+            return False  
+        
+        if  isinstance(j, str) and has_rec_keyword(j, keyword):
+            return [j.replace(keyword, str(i)) for i in range(rng[0], rng[1] + 1)]    
+        
+        if isinstance(j, dict) and has_rec_keyword(j, keyword):
+            duplicated_dict = copy.deepcopy(j)
+            for key, value in duplicated_dict.items():
+                if isinstance(value, str) and keyword in value :
+                    duplicated_dict[key] = expand_list(value,keyword, rng)
+                elif isinstance(value, dict) and has_rec_keyword(value, keyword):
+                    duplicated_dict[key] = []
+                    for _ in range(rng[0], rng[1] + 1):
+                        new_dict = copy.deepcopy(value)
+                        for sub_key, sub_value in new_dict.items():
+                            if isinstance(sub_value, str) and keyword in sub_value:
+                                new_dict[sub_key] = sub_value.replace(keyword, str(_))
+                        duplicated_dict[key].append(new_dict)
+                
+            return duplicated_dict
+        
+        if  isinstance(j, list):
+            return [expand_list(value,keyword, rng) for value in j]
+        return j  
+    "распаковываем конфигурацию из словаря с префиксами"
+    fu=copy.deepcopy(d)
+    fu=expand_list(fu,"%REC%",(int(fu["recipes_range"][0]), int(fu["recipes_range"][1])))
+    #распаковка дозаторов в рецептах в первую очередь
+    #затем распаковка в массиве словарей рецептов - префикса дозаторов, преобразование записей в списки
+    
+    fu["recipedata"]=[expand_list(i,"%DOSER%",(int(fu["dosers_range"][0]), int(fu["dosers_range"][1]))) for i in fu["recipedata"]]
+    #распаковка дозаторов в разделе mixdata
+
+    md=fu["mixdata"]
+
+    fu["mixdata"]=expand_list(md,"%DOSER%",(int(fu["dosers_range"][0]), int(fu["dosers_range"][1]))) 
+
+    return fu
 
 
 

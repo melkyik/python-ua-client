@@ -1,3 +1,4 @@
+#бэкап от файла с реализацией подписок на абсолютно все точки фермы
 import json
 from icecream import ic
 from asyncua import Client, ua, Node
@@ -276,7 +277,6 @@ class FarmPLC:
         #    return self.getTagByShort(short).node
        # else:
         self.getTagByShort(short).node =self.client.get_node(self.prefix+self.retprefix+short)
-       
         return self.getTagByShort(short).node 
 
     def _getNodeShort_TA(self,short)->Node:
@@ -359,8 +359,7 @@ class FarmPLC:
         if not self.getTagByShort(short):
             try:
                 await self.client.check_connection()
-                node=  self.client.get_node(self.prefix+self.retprefix+short)
-               # ic(node,self.prefix+self.retprefix+short)
+                node=  self.getNodeShort(short=short)
                 param=await node.read_data_value()
                 if not param:
                     return None
@@ -372,8 +371,8 @@ class FarmPLC:
                     #pt.plcdate=param.SourceTimestamp
                     return param.Value.Value
 
-            except Exception as error:
-                 #mylogger.warning(f"Ошибка чтения {short} {node} - {error}")
+            except:
+                mylogger.warning("Ошибка чтения %s",short)
                 return None
         else:
             return self.getTagByShort(short).value
@@ -467,7 +466,7 @@ class FarmPLC:
         EC_Measured=0
         ph_Measured=0
         tanklevel=0
-        start_date=None
+        start_date:datetime=None
         EC_tank=0
         fluidflag=False
         url_object = URL.create(
@@ -482,29 +481,30 @@ class FarmPLC:
             auto,autostat= to_int(self.getValueShort("GVL.Command.AutoStage")),self.getTagByShort("GVL.Command.AutoStage").status,
             recipe= to_int(self.getValueShort("GVL.Command.Automate.Recipe"))
             autostage,plcdate= to_int(self.getValueShort("GVL.Command.Automate.Stage")),self.getTagByShort("GVL.Command.Automate.Stage").plcdate
-          
+            k_correct=to_float(self.getValueShort("GVL.Command.Fluid.K_correct"))
             fluidstage=to_int(self.getValueShort("GVL.Command.Fluid.Stage"))
             fluidcnt=to_int(self.getValueShort("GVL.Command.Fluid.cnt"))
             
+    
 
             if oldautostage!=autostage:
                 mylogger.info(f"{self.name} autostage ={autostage} old={oldautostage} ")
             
             if (auto==1) and autostat: #автоматический режим активен
-                if ((fluidstage in [5,6,7]) and (oldfluidstage in [2,3,4])) and (fluidcnt>0) and not fluidflag :#or( datetime.now().minute==45 and datetime.now().second==0):
-                    ecwater=to_float(await self.forcereadvalueshort("GVL.Command.Fluid.ECWater"))
-                    k_correct=to_float(await self.forcereadvalueshort("GVL.Command.Fluid.K_correct"))
-                    tanklevel=to_float(await self.forcereadvalueshort("GVL.Command.Fluid.Level"))
+                if ((fluidstage in [5,6,7]) and (oldfluidstage in [2,3,4])) and (fluidcnt>0) and not fluidflag:#or( datetime.now().minute==23):
+                    ecwater=to_float(self.getValueShort("GVL.Command.Fluid.ECWater"))
+                    tanklevel=to_float(self.getValueShort("GVL.Command.Fluid.Level"))
                     EC_tank = to_float(self.getPointByName(f'ECtank.{recipe}').value if self.getPointByName(f'ECtank.{recipe}') else None)
                     mylogger.info(f"{self.name} - ECwater = {ecwater}, tanklevel={tanklevel} ectank={EC_tank} k_correct={k_correct}")
                     fluidflag=True
-                if (oldautostage !=autostage ) and (autostage in [3,4]): #or( datetime.now().minute==47 and datetime.now().second==0): 
+                if (oldautostage !=autostage ) and (autostage in range(3,5)): #начат замес
+                    mylogger.info(f"{self.name} - зафиксирован старт замеса в {plcdate} в зону {recipe}")
                     start_date=plcdate
-                    mylogger.info(f"{self.name} - зафиксирован старт замеса в {start_date} в зону {recipe}")
-                if (oldautostage in range(5,9)) and (autostage==9)  :#or( datetime.now().minute==2 and datetime.now().second==0) :  #значит начат залив в зону
+
+                if (oldautostage in range(5,9)) and (autostage==9) :#or( datetime.now().minute==54 and datetime.now().second==0) :  #значит начат залив в зону
                     mylogger.info(f"{self.name} - зафиксирован залив в зону {recipe} в {plcdate}")
-                    EC_Measured=to_float(await self.forcereadvalueshort("GVL.Command.Fluid.EC_Measured"))
-                    ph_Measured=to_float(await self.forcereadvalueshort("GVL.Command.Fluid.ph_Measured"))
+                    EC_Measured=to_float(self.getValueShort("GVL.Command.Fluid.EC_Measured"))
+                    ph_Measured=to_float(self.getValueShort("GVL.Command.Fluid.ph_Measured"))
                  
 
                     try:
@@ -513,79 +513,78 @@ class FarmPLC:
                             Session=sessionmaker(bind=engine)
                             session=Session()
                             if (start_date=="None") or (start_date is None) :
-                                raise Exception(f"{self.name} start_date not present")
+                                raise Exception("{self.name} start_date not present")
                             row=MixData(        farm=self.name,
                                                 start_mix=start_date,
                                                 end_mix=plcdate,
                                                 result=None,
                                                 zone=recipe,
                                                 zonename=self.zonenames.get(str(recipe)),
-                                                rd_Automate         =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].Automate"),
-                                                rd_AutomateCorr     =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].isAutoCorrection"),
-                                                rd_Cycle            =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].Cycle"),
-                                                rd_nCycle           =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].nCycle"),
-                                                rd_K                =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].K"),
-                                                rd_KEC              =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].K_EC"),
-                                                rd_KpH              =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].K_pH"),
-                                                rd_pH_Zone          =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].pH_Zone"),
-                                                rd_V_irrigation     =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].V_irrigation"),
+                                                rd_Automate         =self.getValueByName(f"recipedata[{recipe}].Automate"),
+                                                rd_AutomateCorr     =self.getValueByName(f"recipedata[{recipe}].AutomateCorr"),
+                                                rd_Cycle            =self.getValueByName(f"recipedata[{recipe}].Cycle"),
+                                                rd_nCycle           =self.getValueByName(f"recipedata[{recipe}].nCycle"),
+                                                rd_K                =self.getValueByName(f"recipedata[{recipe}].K"),
+                                                rd_KEC              =self.getValueByName(f"recipedata[{recipe}].KEC"),
+                                                rd_KpH              =self.getValueByName(f"recipedata[{recipe}].KpH"),
+                                                rd_V_irrigation     =self.getValueByName(f"recipedata[{recipe}].V_irrigation"),
                                                 md_Volume           = None if (tanklevel=="None") or (tanklevel is None) else tanklevel,
                                                 md_ECWater          = None if (ecwater=="None") or (ecwater is None) else ecwater,
                                                 md_ECTank           =None if (EC_tank=="None") or (EC_tank is None) else EC_tank,
                                                 md_K_correct           = None if (k_correct=="None") or (k_correct is None) else k_correct,
-                                                rd_DoseZone_0       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].DoseZone[0]"),
-                                                rd_DoseZone_1       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].DoseZone[1]"),
-                                                rd_DoseZone_2       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].DoseZone[2]"),
-                                                rd_DoseZone_3       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].DoseZone[3]"),
-                                                rd_DoseZone_4       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].DoseZone[4]"),
-                                                rd_DoseZone_5       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].DoseZone[5]"),
-                                                rd_DoseZone_6       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].DoseZone[6]"),
-                                                rd_DoseZone_7       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].DoseZone[7]"),
-                                                rd_DoseZone_8       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].DoseZone[8]"),
-                                                rd_DoseZone_9       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].DoseZone[9]"),
+                                                rd_DoseZone_0       =self.getValueByName(f"recipedata[{recipe}].DoseZone[0]"),
+                                                rd_DoseZone_1       =self.getValueByName(f"recipedata[{recipe}].DoseZone[1]"),
+                                                rd_DoseZone_2       =self.getValueByName(f"recipedata[{recipe}].DoseZone[2]"),
+                                                rd_DoseZone_3       =self.getValueByName(f"recipedata[{recipe}].DoseZone[3]"),
+                                                rd_DoseZone_4       =self.getValueByName(f"recipedata[{recipe}].DoseZone[4]"),
+                                                rd_DoseZone_5       =self.getValueByName(f"recipedata[{recipe}].DoseZone[5]"),
+                                                rd_DoseZone_6       =self.getValueByName(f"recipedata[{recipe}].DoseZone[6]"),
+                                                rd_DoseZone_7       =self.getValueByName(f"recipedata[{recipe}].DoseZone[7]"),
+                                                rd_DoseZone_8       =self.getValueByName(f"recipedata[{recipe}].DoseZone[8]"),
+                                                rd_DoseZone_9       =self.getValueByName(f"recipedata[{recipe}].DoseZone[9]"),
 
-                                                rd_EC_After_0       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].EC_After[0]"),
-                                                rd_EC_After_1       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].EC_After[1]"),
-                                                rd_EC_After_2       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].EC_After[2]"),
-                                                rd_EC_After_3       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].EC_After[3]"),
-                                                rd_EC_After_4       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].EC_After[4]"),
-                                                rd_EC_After_5       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].EC_After[5]"),
-                                                rd_EC_After_6       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].EC_After[6]"),
-                                                rd_EC_After_7       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].EC_After[7]"),
-                                                rd_EC_After_8       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].EC_After[8]"),
-                                                rd_EC_After_9       =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].EC_After[9]"),
-                                                rd_ECStart          =await self.forcereadvalueshort(f"GVL.RecipesStruct.Recipes[{recipe}].EC_Start_zone"),
+                                                rd_EC_After_0       =self.getValueByName(f"recipedata[{recipe}].EC_After[0]"),
+                                                rd_EC_After_1       =self.getValueByName(f"recipedata[{recipe}].EC_After[1]"),
+                                                rd_EC_After_2       =self.getValueByName(f"recipedata[{recipe}].EC_After[2]"),
+                                                rd_EC_After_3       =self.getValueByName(f"recipedata[{recipe}].EC_After[3]"),
+                                                rd_EC_After_4       =self.getValueByName(f"recipedata[{recipe}].EC_After[4]"),
+                                                rd_EC_After_5       =self.getValueByName(f"recipedata[{recipe}].EC_After[5]"),
+                                                rd_EC_After_6       =self.getValueByName(f"recipedata[{recipe}].EC_After[6]"),
+                                                rd_EC_After_7       =self.getValueByName(f"recipedata[{recipe}].EC_After[7]"),
+                                                rd_EC_After_8       =self.getValueByName(f"recipedata[{recipe}].EC_After[8]"),
+                                                rd_EC_After_9       =self.getValueByName(f"recipedata[{recipe}].EC_After[9]"),
+                                                rd_ECStart          =self.getValueByName(f"recipedata[{recipe}].EC_Start_zone"),
 
                                                 md_ECr_0            =None,
-                                                md_ECr_1            =await self.forcereadvalueshort(f"GVL.Command.Fluid.ECr[1]"),
-                                                md_ECr_2            =await self.forcereadvalueshort(f"GVL.Command.Fluid.ECr[2]"),
-                                                md_ECr_3            =await self.forcereadvalueshort(f"GVL.Command.Fluid.ECr[3]"),
-                                                md_ECr_4            =await self.forcereadvalueshort(f"GVL.Command.Fluid.ECr[4]"),
-                                                md_ECr_5            =await self.forcereadvalueshort(f"GVL.Command.Fluid.ECr[5]"),
-                                                md_ECr_6            =await self.forcereadvalueshort(f"GVL.Command.Fluid.ECr[6]"),
-                                                md_ECr_7            =await self.forcereadvalueshort(f"GVL.Command.Fluid.ECr[7]"),
-                                                md_ECr_8            =await self.forcereadvalueshort(f"GVL.Command.Fluid.ECr[8]"),
-                                                md_ECr_9            =await self.forcereadvalueshort(f"GVL.Command.Fluid.ECr[9]"),
+                                                md_ECr_1            =self.getValueByName(f"mixdata.ECr[1]"),
+                                                md_ECr_2            =self.getValueByName(f"mixdata.ECr[2]"),
+                                                md_ECr_3            =self.getValueByName(f"mixdata.ECr[3]"),
+                                                md_ECr_4            =self.getValueByName(f"mixdata.ECr[4]"),
+                                                md_ECr_5            =self.getValueByName(f"mixdata.ECr[5]"),
+                                                md_ECr_6            =self.getValueByName(f"mixdata.ECr[6]"),
+                                                md_ECr_7            =self.getValueByName(f"mixdata.ECr[7]"),
+                                                md_ECr_8            =self.getValueByName(f"mixdata.ECr[8]"),
+                                                md_ECr_9            =self.getValueByName(f"mixdata.ECr[9]"),
                                                 md_dozevol_0        =None,
-                                                md_dozevol_1        =await self.forcereadvalueshort(f"GVL.Command.Fluid.Volume[1]"),
-                                                md_dozevol_2        =await self.forcereadvalueshort(f"GVL.Command.Fluid.Volume[2]"),
-                                                md_dozevol_3        =await self.forcereadvalueshort(f"GVL.Command.Fluid.Volume[3]"),
-                                                md_dozevol_4        =await self.forcereadvalueshort(f"GVL.Command.Fluid.Volume[4]"),
-                                                md_dozevol_5        =await self.forcereadvalueshort(f"GVL.Command.Fluid.Volume[5]"),
-                                                md_dozevol_6        =await self.forcereadvalueshort(f"GVL.Command.Fluid.Volume[6]"),
-                                                md_dozevol_7        =await self.forcereadvalueshort(f"GVL.Command.Fluid.Volume[7]"),
-                                                md_dozevol_8        =await self.forcereadvalueshort(f"GVL.Command.Fluid.Volume[8]"),
-                                                md_dozevol_9        =await self.forcereadvalueshort(f"GVL.Command.Fluid.Volume[9]"),
+                                                md_dozevol_1        =self.getValueByName(f"mixdata.dozevol[1]"),
+                                                md_dozevol_2        =self.getValueByName(f"mixdata.dozevol[2]"),
+                                                md_dozevol_3        =self.getValueByName(f"mixdata.dozevol[3]"),
+                                                md_dozevol_4        =self.getValueByName(f"mixdata.dozevol[4]"),
+                                                md_dozevol_5        =self.getValueByName(f"mixdata.dozevol[5]"),
+                                                md_dozevol_6        =self.getValueByName(f"mixdata.dozevol[6]"),
+                                                md_dozevol_7        =self.getValueByName(f"mixdata.dozevol[7]"),
+                                                md_dozevol_8        =self.getValueByName(f"mixdata.dozevol[8]"),
+                                                md_dozevol_9        =self.getValueByName(f"mixdata.dozevol[9]"),
                                                 md_Dosername_0      =None,
-                                                md_Dosername_1      =await self.forcereadvalueshort(f"GVL.Dosers.Doser[1].Name"),
-                                                md_Dosername_2      =await self.forcereadvalueshort(f"GVL.Dosers.Doser[2].Name"),
-                                                md_Dosername_3      =await self.forcereadvalueshort(f"GVL.Dosers.Doser[3].Name"),
-                                                md_Dosername_4      =await self.forcereadvalueshort(f"GVL.Dosers.Doser[4].Name"),
-                                                md_Dosername_5      =await self.forcereadvalueshort(f"GVL.Dosers.Doser[5].Name"),
-                                                md_Dosername_6      =await self.forcereadvalueshort(f"GVL.Dosers.Doser[6].Name"),
-                                                md_Dosername_7      =await self.forcereadvalueshort(f"GVL.Dosers.Doser[7].Name"),
-                                                md_Dosername_8      =await self.forcereadvalueshort(f"GVL.Dosers.Doser[8].Name"),
-                                                md_Dosername_9      =await self.forcereadvalueshort(f"GVL.Dosers.Doser[9].Name"),
+                                                md_Dosername_1      =self.getValueByName(f"mixdata.dosernames[1]"),
+                                                md_Dosername_2      =self.getValueByName(f"mixdata.dosernames[2]"),
+                                                md_Dosername_3      =self.getValueByName(f"mixdata.dosernames[3]"),
+                                                md_Dosername_4      =self.getValueByName(f"mixdata.dosernames[4]"),
+                                                md_Dosername_5      =self.getValueByName(f"mixdata.dosernames[5]"),
+                                                md_Dosername_6      =self.getValueByName(f"mixdata.dosernames[6]"),
+                                                md_Dosername_7      =self.getValueByName(f"mixdata.dosernames[7]"),
+                                                md_Dosername_8      =self.getValueByName(f"mixdata.dosernames[8]"),
+                                                md_Dosername_9      =self.getValueByName(f"mixdata.dosernames[9]"),
                                                 md_ECmix=None if (EC_Measured=="None") or (EC_Measured is None) else EC_Measured,
                                                 md_pHmix=None if (ph_Measured=="None") or (ph_Measured is None) else ph_Measured,
                                                         )
@@ -595,15 +594,11 @@ class FarmPLC:
                             session.add(row)
                             session.commit()
                             session.close()
-                            mylogger.info(f"{self.name} row added ")
+                            mylogger.info("{self.name} row added ")
                             fluidflag=False
-                            start_date=None
                         else:
-                            fluidflag=False
-                            raise  Exception(f"{self.name} error recipe={recipe} или статус точки - неисправность")   
-                             
+                            raise  Exception(f"{self.name} error recipe={recipe} или статус точки - неисправность")    
                     except Exception as error:
-                        fluidflag=False
                         mylogger.error(error)
             oldautostage=autostage
             oldfluidstage=fluidstage
@@ -872,7 +867,7 @@ class BrowseDict(dict):
     
    
 def extract_prefix(d)->dict:
-    "преобразует префиксы конфигурации в развернутые списки внутри словаря. нужно для распаковки данных огромного числа элементов"
+    "преобразует префиксы конфигурации в развернутые списки внутри словаря"
     def expand_list(j,keyword:str,rng=(0,2))->Any:
         def has_rec_keyword(value, keyword):
             """проверка условия что префикс есть в значении или подзначениях и с ним нужно работать"""

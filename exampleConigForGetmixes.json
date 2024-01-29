@@ -1,0 +1,125 @@
+{   
+    "farmname":"Berdsk",
+    "timezone":"Asia/Novosibirsk",
+    "plcip":{"FU1":
+                {
+                 
+                "opcip":"opc.tcp://10.10.13.30:4840",
+                "opcuser":"admin",
+                "opcpassword":"password",
+                "prefix":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.",
+                "dosers_range":["0","9"],
+                "recipes_range":["0","13"],
+                "comment":"dosers_range recipes_range указать в дозерах и в рецептах диапазон массива, при вызове использовать имена префиксов",
+
+                "subs":{
+                    "auto":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Command.AutoStage",
+                    "recipe":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Command.Automate.Recipe",
+                    "autostage":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Command.Automate.Stage",
+                    "fluidstage":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Command.Fluid.Stage",
+                    "fluidcnt":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Command.Fluid.cnt"
+                },
+                "values":{                    
+                        "Room 2 Average temperature":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.PidTemp[2].Value",
+                        "Room 2 Average humidity":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.PidHum[2].Value",
+                        "Room 2 Average CO2":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.PidCO2[2].Value",
+                        "Room 3 Average temperature":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.PidTemp[3].Value",
+                        "Room 3 Average humidity":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.PidHum[3].Value",
+                        "Room 3 Average CO2":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.PidCO2[3].Value",
+                        "Room 4 Average temperature":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.PidTemp[4].Value",
+                        "Room 4 Average humidity":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.PidHum[4].Value",
+                        "Room 4 Average CO2":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.PidCO2[4].Value",
+                        "Light room 1":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.LightRoom1",
+                        "Light room 2":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.LightRoom2",
+                        "Light room 3":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.LightRoom3",
+                        "Light room 4":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.LightRoom4"     
+                        },
+           
+                 "mixdata":{
+                    "ECr":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Command.Fluid.ECr[%DOSER%]",
+                    "dozevol":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Command.Fluid.Volume[%DOSER%]",
+                    "pHr":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Command.Fluid.pHr",
+                    "dosernames":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Dosers.Doser[%DOSER%].Name",
+                    "volume":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Command.Fluid.Level",
+                    "ECWater":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Command.Fluid.ECWater",
+                    "EC_Measured":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Command.Fluid.EC_Measured",
+                    "ph_Measured":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Command.Fluid.ph_Measured",
+                    "K_correct":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.Command.Fluid.K_correct"
+    
+         
+                 },       
+                 "recipedata":{
+                 "Automate":"ns=4, s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.RecipesStruct.Recipes[%REC%].Automate",
+                 "AutomateCorr":"ns=4, s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.RecipesStruct.Recipes[%REC%].isAutoCorrection",
+                 "Cycle":"ns=4, s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.RecipesStruct.Recipes[%REC%].Cycle",
+                 "nCycle":"ns=4, s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.RecipesStruct.Recipes[%REC%].nCycle",
+                 "K":"ns=4, s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.RecipesStruct.Recipes[%REC%].K",
+                 "KEC":"ns=4, s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.RecipesStruct.Recipes[%REC%].K_EC",
+                 "KpH":"ns=4, s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.RecipesStruct.Recipes[%REC%].K_pH",
+                 "pH_Zone":"ns=4, s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.RecipesStruct.Recipes[%REC%].pH_Zone",
+                 "V_irrigation":"ns=4, s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.RecipesStruct.Recipes[%REC%].V_irrigation",
+                 "DoseZone":"ns=4, s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.RecipesStruct.Recipes[%REC%].DoseZone[%DOSER%]",
+                 "EC_After":"ns=4, s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.RecipesStruct.Recipes[%REC%].EC_After[%DOSER%]",
+                 "KT1_PH_zone":"ns=4, s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.RecipesStruct.Recipes[%REC%].KT1_PH_zone",
+                 "EC_Start_zone":"ns=4, s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.RecipesStruct.Recipes[%REC%].EC_Start_zone"
+                },
+                "zonenames":{"1":"Z1",
+                             "2":"Z2",
+                             "3":"X1",
+                             "4":"D",
+                             "5":"E",
+                             "6":"F",
+                             "7":"G",
+                             "8":"H",
+                             "9":"L",
+                             "10":"M",
+                             "11":"B",
+                             "12":"A",
+                             "13":"C"
+                
+                },   
+                "ECtank":{
+                      "1": "ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.AIArray.AI[27].AIInf.value",
+                      "2": "ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.AIArray.AI[30].AIInf.value",
+                      "3": "ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.AIArray.AI[33].AIInf.value",
+                      "4": "ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.AIArray.AI[36].AIInf.value",
+                      "5": "ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.AIArray.AI[39].AIInf.value",
+                      "6": "ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.AIArray.AI[42].AIInf.value",
+                      "7": "ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.AIArray.AI[45].AIInf.value",
+                      "8": "ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.AIArray.AI[48].AIInf.value",
+                      "9": "ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.AIArray.AI[51].AIInf.value",
+                      "10":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.AIArray.AI[54].AIInf.value",
+                      "11":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.AIArray.AI[57].AIInf.value",
+                      "12":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.AIArray.AI[60].AIInf.value",
+                      "13":"ns=4; s=|var|WAGO 750-8202 PFC200 2ETH RS.Application.GVL.AIArray.AI[63].AIInf.value"
+
+
+                },
+                "ECGraph":{"1":"6993",
+                           "2":"7017",
+                           "3":"7041",
+                           "4":"7065",
+                           "5":"7089",
+                           "6":"7113",
+                           "7":"7309",
+                           "8":"7333",
+                           "9":"7357",
+                           "10":"7477",
+                           "11":"7381",
+                           "12":"7405",
+                           "13":"7429"
+
+                },
+                "logfilter":" `GroupID`=22 and `MessageID`=135 and `Kind`=2 "
+                
+                }
+            },
+    "scada":{"dbhost":"10.10.0.251",
+             "dbuser":"scadauser",  
+             "dbpass":"<password>",
+             "dbname":"Berdsk_DB"
+            }
+   
+
+    
+}

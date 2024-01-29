@@ -15,8 +15,11 @@ import sqlalchemy
 from sqlalchemy import URL,create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
-
-ic.disable()
+from dotenv import load_dotenv
+import os
+from os.path import join, dirname
+dotenv_path = join(dirname(__file__), '.env')
+load_dotenv(dotenv_path)
 farms=FarmList()
 
 #---------------------------------
@@ -42,33 +45,20 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 file_handler.setFormatter(formatter)
 mylogger.addHandler(file_handler)
 logging.getLogger("FarmClass").addHandler(file_handler)
+
+#mylogger.info(os.getenv("TEST_ENV"))
 #---------------------------------
-"""
-        0 : Text := 'Pending';
-        1,2 : Text := 'Dumping to sewer';
-        3,4 : Text := 'Filling tank';
-        5,6: Text := 'Mixing solution  for zone';
-        7: Text := 'Correcting pH';
-        8: text:= 'Waiting to drain from the zone';
-        9 : Text := 'Pumpung to zone';
-        20 : Text := 'End operation';
-"""
 
 
-
-
-
-    
-WORK_DIR='/var/scripts/python-ua-client/getmix_config'
 farms=FarmList()
 def setup():
     """читает данные всех ферм"""
     settings=[]  
 
     #ic.disable() 
-    files:list[str]= os.listdir(WORK_DIR)
+    files:list[str]= os.listdir(os.environ.get("WORK_DIR"))
     for file_name in files:
-        file_path = os.path.join(WORK_DIR, file_name)
+        file_path = os.path.join(os.environ.get("WORK_DIR"), file_name)
         if os.path.isfile(file_path) and file_name.lower().endswith('.json') and not file_name.lower().__contains__('_'):
             try:
                 with open(file_path, "r") as read_file: 
@@ -150,9 +140,9 @@ def find_substring_path(data, substring):
 
 def setup2():
     settings=[]  
-    files:list[str]= os.listdir(WORK_DIR)
+    files:list[str]= os.listdir(os.environ.get("WORK_DIR"))
     for file_name in files:
-        file_path = os.path.join(WORK_DIR, file_name)
+        file_path = os.path.join(os.environ.get("WORK_DIR"), file_name)
         if os.path.isfile(file_path) and file_name.lower().endswith('.json') and not file_name.lower().__contains__('_'):
             try:
                 with open(file_path, "r") as read_file: 
@@ -171,54 +161,60 @@ def setup2():
         for fu in k["plcip"]:
             fucnt+=1
             tempfu=BrowseDict(extract_prefix(k["plcip"][fu]))
+           
             pt=[]
             pt+=tempfu.get_values("subs")
-            pt+=tempfu.get_values("mixdata")
-            pt+=tempfu.get_values("recipedata")
+            #pt+=tempfu.get_values("mixdata")
+            #pt+=tempfu.get_values("recipedata")
             pt+=tempfu.get_values("values")
+            pt+=tempfu.get_values("ECtank")
             #ic(pt)
             names,points=zip(*pt)
-                
+            #ic(names  ) 
             
 
-        try:  
-            mylogger.info(f"Ферма {k['farmname']} FU{fucnt} {len(points)} точек")
-            if points!=[]:
-                i+=1
-                farms.add(   #вызов конструктора фермы с необходимыми данными для подключения
-                jconf={ "id":str(i),
-                "name":f"{k['farmname']} FU{fucnt}",
-                "URL":tempfu['opcip'],
-                "login":tempfu['opcuser'],
-                "password":tempfu['opcpassword'],
-                "prefix":"ns=4;s=",
-                "retprefix":f"{extract_point_name(points[0])[1] if points !=[] else ''}" #с 1 точки заберем префиксы для этого точки читаются выше
-                 }
-                )
-                
-                farms.get(i).bd_logfilter=tempfu.get("logfilter") if tempfu.get("logfilter") else None
-     
-                if  tempSQL.get("dbhost")  and tempSQL.get("dbuser") and  tempSQL.get("dbpass") and  tempSQL.get("dbname"):
-                    #если есть данные по подключению для удаленки и то создаем строку URL для алхимии 
-                    farms.get(i).bd_URL= URL.create(
-                                        "mysql+pymysql",
-                                        username=tempSQL.get("dbuser"),
-                                        password=tempSQL.get("dbpass"),  
-                                        host    =tempSQL.get("dbhost"),
-                                        database=tempSQL.get("dbname")
-                                        )
-                    #ic(farms.get(i).bd_URL)                
+            try:  
+                mylogger.info(f"Ферма {k['farmname']} FU{fucnt} {len(points)} точек")
+                if points!=[]:
+                    i+=1
+                    farms.add(   #вызов конструктора фермы с необходимыми данными для подключения
+                    jconf={ "id":str(i),
+                    "name":f"{k['farmname']} FU{fucnt}",
+                    "URL":tempfu['opcip'],
+                    "login":tempfu['opcuser'],
+                    "password":tempfu['opcpassword'],
+                    "prefix":"ns=4;s=",
+                    "retprefix":f"{extract_point_name(points[0])[1] if points !=[] else ''}" #с 1 точки заберем префиксы для этого точки читаются выше
+                    }
+                    )
                     
-                for p in pt:
-                    shortpoint=extract_point_name(p[1])[0],p[0],str(i),False
-                    farms.get(i).addpoint(shortpoint)   
-                           #добавление точек в подписку и конфигурации
-#                    ic(shortpoint)
-        except KeyError as error: #ловушка на некорректную конфу в базе
-            mylogger.warning(f"Косяк в конфе фермы  {k[0]}, глюк в поле {error}" )
-        finally:
-            del tempSQL,tempfu
-      
+                    farms.get(i).bd_logfilter=tempfu.get("logfilter") if tempfu.get("logfilter") else None
+                    farms.get(i).zonenames=copy.deepcopy(tempfu.get("zonenames"))
+                    
+                    if  tempSQL.get("dbhost")  and tempSQL.get("dbuser") and  tempSQL.get("dbpass") and  tempSQL.get("dbname"):
+                        #если есть данные по подключению для удаленки и то создаем строку URL для алхимии 
+                        farms.get(i).bd_URL= URL.create(
+                                            "mysql+pymysql",
+                                            username=tempSQL.get("dbuser"),
+                                            password=tempSQL.get("dbpass"),  
+                                            host    =tempSQL.get("dbhost"),
+                                            database=tempSQL.get("dbname")
+                                            )
+                        #ic(farms.get(i).bd_URL)                
+                        
+                    for p in pt:
+                        shortpoint=extract_point_name(p[1])[0],p[0],str(i),False
+                        farms.get(i).addpoint(shortpoint)   
+                            #добавление точек в подписку и конфигурации
+                        #ic(shortpoint)
+            except KeyError as error: #ловушка на некорректную конфу в базе
+                mylogger.warning(f"Косяк в конфе фермы  {k[0]}, глюк в поле {error}" )
+     
+                
+    del tempSQL,tempfu
+    fr=[]            
+    #for f in farms:
+    #    fr.append(farms.get(f).name)  
     mylogger.info("сумма активных ферм: %s",len(farms.keys()))
    
     return True
@@ -236,117 +232,6 @@ def setup2():
 """
 
 
-async def mix_loop():
-    def to_int(x)->int:
-        return 0 if (x is None) or (x=="None") else int(float(x))
-    oldautostage=0
-    start_date:datetime=None
-    while True:
-       
-        f=farms["1"]
-        auto,autostat= to_int(f.getValueShort("GVL.Command.AutoStage")),f.getTagByShort("GVL.Command.AutoStage").status,
-        recipe= to_int(f.getValueShort("GVL.Command.Automate.Recipe"))
-        autostage,plcdate= to_int(f.getValueShort("GVL.Command.Automate.Stage")),f.getTagByShort("GVL.Command.Automate.Stage").plcdate
-        if oldautostage!=autostage:
-            mylogger.info(f"autostage ={autostage} old={oldautostage} ")
-        if (auto==1) and autostat: #автоматический режим активен
-            if (oldautostage !=autostage ) and (autostage in range(3,5)): #начат замес
-                mylogger.info(f"{f.name} - зафиксирован старт замеса в {plcdate}")
-                start_date=plcdate
-            if (oldautostage in range(5,9)) and (autostage==9): #значит начат залив в зону
-                mylogger.info(f"{f.name} - зафиксирован залив в зону {recipe} в {plcdate}")
-                url_object = URL.create(
-                    "mysql+pymysql",
-                    username="scadauser",
-                    password="3a8AWur6H2",  # plain (unescaped) text
-                    host="10.10.0.251",
-                    database="testdemo",
-                )
-                try:
-                    if f.getTagByShort("GVL.Command.AutoStage").status:
-                        engine= create_engine(url_object,echo=True)
-                        Session=sessionmaker(bind=engine)
-                        session=Session()
-                        if (start_date=="None") or (start_date is None):
-                            start_date=plcdate
-                        row=MixData(        farm=f.name,
-                                            start_mix=start_date,
-                                            end_mix=plcdate,
-                                            result=None,
-                                            zone=recipe,
-                                            rd_Automate         =f.getPointByName(f"recipedata[{recipe}].Automate").value,
-                                            rd_AutomateCorr     =f.getPointByName(f"recipedata[{recipe}].AutomateCorr").value,
-                                            rd_Cycle            =f.getPointByName(f"recipedata[{recipe}].Cycle").value,
-                                            rd_nCycle           =f.getPointByName(f"recipedata[{recipe}].nCycle").value,
-                                            rd_K                =f.getPointByName(f"recipedata[{recipe}].K").value,
-                                            rd_KEC              =f.getPointByName(f"recipedata[{recipe}].KEC").value,
-                                            rd_KpH              =f.getPointByName(f"recipedata[{recipe}].KpH").value,
-                                            rd_V_irrigation     =f.getPointByName(f"recipedata[{recipe}].K").value,
-                                            rd_DoseZone_0       =f.getPointByName(f"recipedata[{recipe}].DoseZone[0]").value,
-                                            rd_DoseZone_1       =f.getPointByName(f"recipedata[{recipe}].DoseZone[1]").value,
-                                            rd_DoseZone_2       =f.getPointByName(f"recipedata[{recipe}].DoseZone[2]").value,
-                                            rd_DoseZone_3       =f.getPointByName(f"recipedata[{recipe}].DoseZone[3]").value,
-                                            rd_DoseZone_4       =f.getPointByName(f"recipedata[{recipe}].DoseZone[4]").value,
-                                            rd_DoseZone_5       =f.getPointByName(f"recipedata[{recipe}].DoseZone[5]").value,
-                                            rd_DoseZone_6       =f.getPointByName(f"recipedata[{recipe}].DoseZone[6]").value,
-                                            rd_DoseZone_7       =f.getPointByName(f"recipedata[{recipe}].DoseZone[7]").value,
-                                            rd_DoseZone_8       =f.getPointByName(f"recipedata[{recipe}].DoseZone[8]").value,
-                                            rd_DoseZone_9       =f.getPointByName(f"recipedata[{recipe}].DoseZone[9]").value,
-                                            
-                                            rd_EC_After_0       =f.getPointByName(f"recipedata[{recipe}].EC_After[0]").value,
-                                            rd_EC_After_1       =f.getPointByName(f"recipedata[{recipe}].EC_After[1]").value,
-                                            rd_EC_After_2       =f.getPointByName(f"recipedata[{recipe}].EC_After[2]").value,
-                                            rd_EC_After_3       =f.getPointByName(f"recipedata[{recipe}].EC_After[3]").value,
-                                            rd_EC_After_4       =f.getPointByName(f"recipedata[{recipe}].EC_After[4]").value,
-                                            rd_EC_After_5       =f.getPointByName(f"recipedata[{recipe}].EC_After[5]").value,
-                                            rd_EC_After_6       =f.getPointByName(f"recipedata[{recipe}].EC_After[6]").value,
-                                            rd_EC_After_7       =f.getPointByName(f"recipedata[{recipe}].EC_After[7]").value,
-                                            rd_EC_After_8       =f.getPointByName(f"recipedata[{recipe}].EC_After[8]").value,
-                                            rd_EC_After_9       =f.getPointByName(f"recipedata[{recipe}].EC_After[9]").value,
-                                            md_ECr_0            =None,
-                                            md_ECr_1            =f.getPointByName(f"mixdata.ECr[1]").value,
-                                            md_ECr_2            =f.getPointByName(f"mixdata.ECr[2]").value,
-                                            md_ECr_3            =f.getPointByName(f"mixdata.ECr[3]").value,
-                                            md_ECr_4            =f.getPointByName(f"mixdata.ECr[4]").value,
-                                            md_ECr_5            =f.getPointByName(f"mixdata.ECr[5]").value,
-                                            md_ECr_6            =f.getPointByName(f"mixdata.ECr[6]").value,
-                                            md_ECr_7            =f.getPointByName(f"mixdata.ECr[7]").value,
-                                            md_ECr_8            =f.getPointByName(f"mixdata.ECr[8]").value,
-                                            md_ECr_9            =f.getPointByName(f"mixdata.ECr[9]").value,
-                                            md_dozevol_0        =None,
-                                            md_dozevol_1        =f.getPointByName(f"mixdata.dozevol[1]").value,
-                                            md_dozevol_2        =f.getPointByName(f"mixdata.dozevol[2]").value,
-                                            md_dozevol_3        =f.getPointByName(f"mixdata.dozevol[3]").value,
-                                            md_dozevol_4        =f.getPointByName(f"mixdata.dozevol[4]").value,
-                                            md_dozevol_5        =f.getPointByName(f"mixdata.dozevol[5]").value,
-                                            md_dozevol_6        =f.getPointByName(f"mixdata.dozevol[6]").value,
-                                            md_dozevol_7        =f.getPointByName(f"mixdata.dozevol[7]").value,
-                                            md_dozevol_8        =f.getPointByName(f"mixdata.dozevol[8]").value,
-                                            md_dozevol_9        =f.getPointByName(f"mixdata.dozevol[9]").value,
-                                            md_Dosername_0      =None,
-                                            md_Dosername_1      =f.getPointByName(f"mixdata.dosernames[1]").value,
-                                            md_Dosername_2      =f.getPointByName(f"mixdata.dosernames[2]").value,
-                                            md_Dosername_3      =f.getPointByName(f"mixdata.dosernames[3]").value,
-                                            md_Dosername_4      =f.getPointByName(f"mixdata.dosernames[4]").value,
-                                            md_Dosername_5      =f.getPointByName(f"mixdata.dosernames[5]").value,
-                                            md_Dosername_6      =f.getPointByName(f"mixdata.dosernames[6]").value,
-                                            md_Dosername_7      =f.getPointByName(f"mixdata.dosernames[7]").value,
-                                            md_Dosername_8      =f.getPointByName(f"mixdata.dosernames[8]").value,
-                                            md_Dosername_9      =f.getPointByName(f"mixdata.dosernames[9]").value,
-                                            md_pHmix=None,
-                                            md_ECmix=None,
-                                                    )
-                        
-
-
-                        session.add(row)
-                        session.commit()
-                        session.close()
-                        mylogger.info(f"row added {row}")
-                except() as error:
-                    mylogger.error(error)
-        oldautostage=autostage
-        await asyncio.sleep(1)
 
 
 
@@ -362,18 +247,16 @@ async def print_farm_loop():
 async def main():
     try:
         tasks=[]
-   
-
-        
-
         for k in farms:
              tasks.append(asyncio.create_task(farms.get(k).loop()))
+             tasks.append(asyncio.create_task(farms.get(k).mix_loop()))
         #tasks.append(asyncio.create_task(AppStatus.terminate()))
         #tasks.append(asyncio.create_task(trends_loop()))
         #await server.serve()
         #tasks.append(asyncio.create_task(print_farm_loop())) #для тестирования обмена с OPC
-        tasks.append(asyncio.create_task( mix_loop()))
+        
         await asyncio.gather(*tasks)
+
     except asyncio.exceptions.CancelledError:
          mylogger.info("exit by cancel") 
          return 0  

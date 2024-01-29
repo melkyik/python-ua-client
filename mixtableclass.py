@@ -30,10 +30,26 @@ class MixData(Base):
     "коэффициент коррекции EC" 
     rd_KpH          =Column("rd_KpH",   Float)
     "коэффициент коррекции pH"  
+    rd_pH_Zone          =Column("rd_pH_Zone",   Float)
+    " pH рецепта"  
     rd_V_irrigation =Column("rd_V_irrigation",   Float)
     "обьем бака ирригации" 
     md_pHmix            =Column("md_pHmix",          Float,default=None)
     md_ECmix            =Column("md_ECmix",          Float,default=None)
+
+#новые столбцы
+    md_Volume          =Column("md_Volume",          Float,default=None)
+    "обьем налитой жидкости"
+    md_ECWater         =Column("md_ECWater",         Float,default=None)
+    "EC осмоса изначальный"
+    md_ECTank            =Column("md_ECTank",         Float,default=None)
+    "EC в баке на начало замеса"
+    rd_ECStart          =Column("rd_ECStart",         Float,default=None)
+    "сохраненый EC через 20 минут после инициализированного налива"
+    md_K_correct           =Column("md_K_correct",         Float,default=None)
+    "коэффициент корректировки расчитанный"
+    zonename=Column("zonename",       String(5),default=None)
+#-----------------------
 
     rd_DoseZone_0 = Column("rd_DoseZone_0", Float, default=None)
     rd_DoseZone_1 = Column("rd_DoseZone_1", Float, default=None)
@@ -100,6 +116,7 @@ class MixData(Base):
         result=None,
         farm=None,
         zone=None,
+        zonename=None,
         rd_Automate=None,
         rd_AutomateCorr=None,
         rd_Cycle=None,
@@ -107,6 +124,7 @@ class MixData(Base):
         rd_K=None,
         rd_KEC=None,
         rd_KpH=None,
+        rd_pH_Zone=None,
         rd_V_irrigation=None,
         rd_DoseZone_0=None,
         rd_DoseZone_1=None,
@@ -160,12 +178,19 @@ class MixData(Base):
         md_Dosername_9=None,
         md_pHmix=None,
         md_ECmix=None,
+        md_Volume=None,
+        md_ECWater=None,
+        md_ECTank=None,
+        rd_ECStart=None,
+        md_K_correct =None,
+
     ):
         self.start_mix = start_mix
         self.end_mix = end_mix
         self.result = result
         self.farm=farm
         self.zone=zone
+        self.zonename=zonename
         self.rd_Automate = rd_Automate
         self.rd_AutomateCorr = rd_AutomateCorr
         self.rd_Cycle = rd_Cycle
@@ -173,6 +198,7 @@ class MixData(Base):
         self.rd_K = rd_K
         self.rd_KEC = rd_KEC
         self.rd_KpH = rd_KpH
+        self.rd_pH_Zone=rd_pH_Zone
         self.rd_V_irrigation = rd_V_irrigation
         self.rd_DoseZone_0 = rd_DoseZone_0
         self.rd_DoseZone_1 = rd_DoseZone_1
@@ -224,21 +250,27 @@ class MixData(Base):
         self.md_Dosername_7 = md_Dosername_7
         self.md_Dosername_8 = md_Dosername_8
         self.md_Dosername_9 = md_Dosername_9
-        
+ 
         self.md_pHmix = md_pHmix
         self.md_ECmix = md_ECmix
+
+        self.md_Volume=md_Volume,
+        self.md_ECWater=md_ECWater,
+        self.md_K_correct =md_K_correct,
+        self.md_ECTank=md_ECTank,
+        self.rd_ECStart=rd_ECStart,
 
     def __repr__(self):
         return f"{self.id} start={self.start_mix}, end={self.end_mix}"
     
-url_object = URL.create(
-            "mysql+pymysql",
-            username="scadauser",
-            password="3a8AWur6H2",  # plain (unescaped) text
-            host="10.10.0.251",
-            database="testdemo",
-        )
+# url_object = URL.create(
+#             "mysql+pymysql",
+#             username="scadauser",
+#             password="3a8AWur6H2",  # plain (unescaped) text
+#             host="10.10.0.251",
+#             database="testdemo",
+#         )
         
-engine= create_engine(url_object,echo=True)    
-Base.metadata.create_all(bind=engine)
+# engine= create_engine(url_object,echo=True)    
+# Base.metadata.create_all(bind=engine)
 

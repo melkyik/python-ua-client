@@ -37,7 +37,7 @@ logging.basicConfig(level=logging.INFO,
 mylogger = logging.getLogger(__name__)
 
 # Создаем file handler for the main module logger
-file_handler = RotatingFileHandler("/var/scripts/python-ua-client/mixings.log", maxBytes=50000, backupCount=10,encoding="UTF8")
+file_handler = RotatingFileHandler("/var/scripts/python-ua-client/logs/mixings.log", maxBytes=100000, backupCount=10,encoding="UTF8")
 file_handler.setLevel(logging.INFO)
 
 # Create a formatter for the main module file handler

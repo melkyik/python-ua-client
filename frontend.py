@@ -3,6 +3,12 @@ import sys
 from streamlit.web import cli as stcli
 import streamlit as st
 from streamlit import runtime
+import yaml
+from yaml.loader import SafeLoader
+import streamlit_authenticator as stauth
+
+
+
 import datetime 
 import os
 import json
@@ -22,11 +28,37 @@ st.set_page_config(page_title='Информация о замесах',
                     page_icon=":bar_chart:",
                     layout="wide"
                     )
+
 #=========================================================
 if 'workdir' not in st.session_state:
     dotenv_path = join(dirname(__file__), '.env')
     load_dotenv(dotenv_path)
     st.session_state["workdir"]=os.environ.get("WORK_DIR")
+
+#=========================================================
+#авторизация немного глючит производит лишнее обновление страницы после фильтра плюс нужно ставить проверку переменной перед рендером почти всего
+
+if 'authconfig' not in st.session_state:
+    filepath=join(dirname(__file__), 'auth/auth.yaml')
+    with open(filepath) as file:
+        st.session_state["authconfig"] = yaml.load(file, Loader=SafeLoader)
+        
+authenticator = stauth.Authenticate(
+        st.session_state["authconfig"]['credentials'],
+        st.session_state["authconfig"]['cookie']['name'],
+        st.session_state["authconfig"]['cookie']['key'],
+        st.session_state["authconfig"]['cookie']['expiry_days'],
+        st.session_state["authconfig"]['preauthorized']
+    )    
+st.session_state["name"], st.session_state["authentication_status"], st.session_state["username"] = authenticator.login(location= 'sidebar')
+if st.session_state["authentication_status"]:
+   authenticator.logout('Logout', 'sidebar')
+elif st.session_state["authentication_status"] == False:
+    st.sidebar.error('Логин/пароль неверный')
+elif st.session_state["authentication_status"] == None:
+    st.sidebar.warning('Введите логин и пароль')
+
+
 #=========================================================
 #ЗАГРУЗКА ДАННЫХ ФЕРМ ИЗ КОНФ JSON
 @st.cache_data
@@ -169,41 +201,46 @@ def getlogdata(farmname,dt_b,dt_e)->pd.DataFrame:
 #def main():
 #=========================================================
 #НАЧАЛО РЕНДЕРА ИНТЕРФЕЙСА
-     
-st.sidebar.header("Фильтр")
-col=st.sidebar.columns(2)
-with col[0]:
-    if col[0].button("Очистить кеш"):
-        st.cache_data.clear()
- 
+if  st.session_state["authentication_status"]:
+    st.sidebar.header("Фильтр")
+    col=st.sidebar.columns(2)
 
-
-with col[1]:
-    col[1].selectbox("Часовой пояс",options=available_timezones(),key="timezone")
-    col[1].write('Текущий часовой пояс %s' % st.session_state["timezone"])
-       
+    with col[0]:
+        if col[0].button("Очистить кеш"):
+            st.cache_data.clear()
 
 
 
-intdates=st.sidebar.date_input(label="Выберите диапазон дат",
-    value=(yesterday,today),min_value=None,max_value=None,
-    format="DD.MM.YYYY",key='maindates'
-) 
-df=datechange(intdates)  
-if not df is None:#ФИЛЬТРЫ НА САЙДБАРЕ
-    farms=st.sidebar.multiselect("Фермы",
-                            options=df["farm"].unique(),
-                            default=df["farm"].unique()
-                            ) 
-    dfi=df.query("farm==@farms")
-    zones=st.sidebar.multiselect("зоны",
-                            options=dfi["zonename"].unique(),
-                            default=dfi["zonename"].unique()
-                            ) 
-    dfi=df.query("farm==@farms & zonename==@zones")
-###ОБРАБООТКА КНОПОК
+    with col[1]:
+        col[1].selectbox("Часовой пояс",options=available_timezones(),key="timezone")
+        col[1].write('Текущий часовой пояс %s' % st.session_state["timezone"])
+        
+
+
+
+    intdates=st.sidebar.date_input(label="Выберите диапазон дат",
+        value=(yesterday,today),min_value=None,max_value=None,
+        format="DD.MM.YYYY",key='maindates'
+    ) 
+    df=datechange(intdates)  
+    if not df is None:#ФИЛЬТРЫ НА САЙДБАРЕ
+        farms=st.sidebar.multiselect("Фермы",
+                                options=df["farm"].unique(),
+                                default=df["farm"].unique()
+                                ) 
+
+        dfi=df.query("farm==@farms")
+        zones=st.sidebar.multiselect("зоны",
+                                options=dfi["zonename"].unique(),
+                                default=dfi["zonename"].unique()
+                                ) 
+        dfi=df.query("farm==@farms & zonename==@zones")
+###ОБРАБОТКА КНОПОК
+    #нужно переделать вывод этого куска тк не работает при обновлении из за авторизации(
     def button_on_click(i):
         "ОБРАБОТКА ДИНАМИЧЕСКОЙ КНОПКИ ПОСЛЕ ФИЛЬТРАЦИИ"
+        if not i in dfi['start_mix'].keys():
+            return 0
         info_exp=st.expander("Информация о замесе",expanded=True)
         doser_names=["Измерение"]
         dozezone=[""]
@@ -212,8 +249,8 @@ if not df is None:#ФИЛЬТРЫ НА САЙДБАРЕ
         dosevol=[""]
         ecr=[""]
         df=pd.DataFrame()
-      
-     
+    
+    
         for c in range(1,10):
             doser_names.append(dfi[f"md_Dosername_{c}"][i]if dfi[f"md_Dosername_{c}"][i] not in doser_names  else f"Doser {c}")
             dozezone.append(dfi[f"rd_DoseZone_{c-1}"][i])
@@ -228,7 +265,7 @@ if not df is None:#ФИЛЬТРЫ НА САЙДБАРЕ
         #КОНФИГУРИРОВАНИЕ ЗАГОЛОВКА данных для ТАБЛИЧКИ
         df["Измерение"]=["Рецепт,мл/л","EC рецепт ms/m3","Обьем удобрений","EC расчитаное"]
         column_config={}
-       #начало отрисовки данных замеса
+    #начало отрисовки данных замеса
         for j in df.columns:
             column_config[j]={'alignment': 'center'}
         info_exp.header(f"{dfi['farm'][i]} Зона {dfi['zonename'][i]} ")
@@ -241,9 +278,9 @@ if not df is None:#ФИЛЬТРЫ НА САЙДБАРЕ
         info_exp.text(f"Старт замеса {tzcnv(dfi['start_mix'][i])} залив в зону {tzcnv(dfi['end_mix'][i])} итого {delta.seconds // 3600 }ч {(delta.seconds % 3600)//60}м {(delta.seconds % 60)}сек"  )
         #рендер подготовленой таблички
         t=info_exp.dataframe(df,column_config=column_config,hide_index=True)
-       # info_exp.header("Параметры замеса")
+    # info_exp.header("Параметры замеса")
         #рендер трех столбцов с measurments
-     
+    
 
         def pc(a,b,com:str=""):
             "вспомогательная функция для вывода дельты в процентах"
@@ -265,16 +302,16 @@ if not df is None:#ФИЛЬТРЫ НА САЙДБАРЕ
             col[2].metric(f"🚰pH рецепта",f"{dfi['rd_pH_Zone'][i]}")    
             col[2].metric(f"🚰pH на конец замеса",f"{dfi['md_pHmix'][i]}",delta=pc(dfi['md_pHmix'][i],dfi['rd_pH_Zone'][i],"от рецепта") )   
         with col[3]:
-           if dfi['rd_AutomateCorr'][i]==1:
-               col[3].metric("Автоматическая коррекция","ON",)
-               col[3].metric(f"Коэфф корректировки",f"{dfi['md_K_correct'][i]}")
-               col[3].metric(f"Обьем зоны ",f"{dfi['rd_V_irrigation'][i]} л.")  
-           else:
-               col[3].metric("Автоматическая коррекция","OFF")
-               col[3].metric(f"корректировочный множитель kEC ",f"{dfi['rd_KEC'][i]}")
-               col[3].metric(f"корректировочный KpH",dfi['rd_KpH'][i])  
+            if dfi['rd_AutomateCorr'][i]==1:
+                col[3].metric("Автоматическая коррекция","ON",)
+                col[3].metric(f"Коэфф корректировки",f"{dfi['md_K_correct'][i]}")
+                col[3].metric(f"Обьем зоны ",f"{dfi['rd_V_irrigation'][i]} л.")  
+            else:
+                col[3].metric("Автоматическая коррекция","OFF")
+                col[3].metric(f"корректировочный множитель kEC ",f"{dfi['rd_KEC'][i]}")
+                col[3].metric(f"корректировочный KpH",dfi['rd_KpH'][i])  
     
-      #вывод графика 
+    #вывод графика 
         info_exp.write("График EC за неделю")  
         dfg=getgraphdata(dfi['farm'][i],dfi['zone'][i])
         info_exp.line_chart(data=dfg,x='ts',y='val',)
@@ -282,16 +319,23 @@ if not df is None:#ФИЛЬТРЫ НА САЙДБАРЕ
         dfl=getlogdata(dfi['farm'][i],tzcnv(dfi['start_mix'][i]),tzcnv(dfi['end_mix'][i]))
         info_exp.write("Лог замеса") 
         info_exp.data_editor(dfl,hide_index=True,width=800)
-                        
-    dfi=df.query("farm==@farms & zonename==@zones")
+    if st.session_state["authentication_status"]:                    
+        dfi=df.query("farm==@farms & zonename==@zones")
 
-    #вывод фильтрованой основной таблицы и в сайдбаре - кнопок конкретных замесов
-    st.expander("данные запроса",expanded=False).data_editor(dfi)
-    st.sidebar.header("Замесы с указанными параметрами")
-    sidebutton={}
-    for i in dfi.index:
-        sidebutton[i]=st.sidebar.button(f"Замес {tzcnv(dfi.start_mix[i])} зона {dfi.zonename[i]:} : {dfi.rd_nCycle[i]:.0f} из {dfi.rd_Cycle[i]:.0f}",on_click=button_on_click,args=[i],key=f"sb{i}")
- 
+        #вывод фильтрованой основной таблицы и в сайдбаре - кнопок конкретных замесов
+        #st.expander("данные запроса",expanded=False).data_editor(dfi)
+        st.sidebar.header("Замесы с указанными параметрами")
+        sidebutton={}
+
+        def filter(i):
+            st.session_state['selected']=i
+            st.session_state['timezone']=st.session_state["farmconf"].get(dfi["farm"][i])['timezone']
+  
+        if 'selected' in st.session_state.keys():
+            button_on_click(st.session_state['selected'])
+        for i in dfi.index:
+            sidebutton[i]=st.sidebar.button(f"{dfi['farm'][i]} Замес {tzcnv(dfi.start_mix[i])} зона {dfi.zonename[i]:} : {dfi.rd_nCycle[i]:.0f} из {dfi.rd_Cycle[i]:.0f}",on_click=filter,args=[i],key=f"sb{i}",use_container_width=True)
+    
 
     
 

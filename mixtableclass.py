@@ -7,6 +7,7 @@ class MixData(Base):
     __tablename__="mixdata"
     id              =Column("id",Integer,autoincrement="auto", primary_key=True)
     farm            =Column("farm",       String(50),index=True)
+    "имя фермы и растворного например Berdsk FU1"
     start_mix       =Column("start_mix",    TIMESTAMP)
     "начало замеса"
     end_mix         =Column("end_mix",    TIMESTAMP)
@@ -52,6 +53,7 @@ class MixData(Base):
 #-----------------------
 
     rd_DoseZone_0 = Column("rd_DoseZone_0", Float, default=None)
+    "Рецепт. концентрация питательного вещества мл/л"
     rd_DoseZone_1 = Column("rd_DoseZone_1", Float, default=None)
     rd_DoseZone_2 = Column("rd_DoseZone_2", Float, default=None)
     rd_DoseZone_3 = Column("rd_DoseZone_3", Float, default=None)
@@ -61,8 +63,9 @@ class MixData(Base):
     rd_DoseZone_7 = Column("rd_DoseZone_7", Float, default=None)
     rd_DoseZone_8 = Column("rd_DoseZone_8", Float, default=None)
     rd_DoseZone_9 = Column("rd_DoseZone_9", Float, default=None)
-
+#-----------------------
     rd_EC_After_0 = Column("rd_EC_After_0", Float, default=None)
+    "Рецепт. ожидаемая электропроводимость растора после добавления питательного вещества мс/см"
     rd_EC_After_1 = Column("rd_EC_After_1", Float, default=None)
     rd_EC_After_2 = Column("rd_EC_After_2", Float, default=None)
     rd_EC_After_3 = Column("rd_EC_After_3", Float, default=None)
@@ -72,8 +75,9 @@ class MixData(Base):
     rd_EC_After_7 = Column("rd_EC_After_7", Float, default=None)
     rd_EC_After_8 = Column("rd_EC_After_8", Float, default=None)
     rd_EC_After_9 = Column("rd_EC_After_9", Float, default=None)
-
+#-----------------------
     md_ECr_0 = Column("md_ECr_0", Float, default=None)
+    "Расчитанная электропроводимость растора после добавления питательного вещества с учетом обьема, осмоса и корректировки мс/см"
     md_ECr_1 = Column("md_ECr_1", Float, default=None)
     md_ECr_2 = Column("md_ECr_2", Float, default=None)
     md_ECr_3 = Column("md_ECr_3", Float, default=None)
@@ -83,8 +87,9 @@ class MixData(Base):
     md_ECr_7 = Column("md_ECr_7", Float, default=None)
     md_ECr_8 = Column("md_ECr_8", Float, default=None)
     md_ECr_9 = Column("md_ECr_9", Float, default=None)
-
+#-----------------------
     md_dozevol_0 = Column("md_dozevol_0", Float, default=None)
+    "Фактический обьем дозы  добавления питательного вещества, мл"
     md_dozevol_1 = Column("md_dozevol_1", Float, default=None)
     md_dozevol_2 = Column("md_dozevol_2", Float, default=None)
     md_dozevol_3 = Column("md_dozevol_3", Float, default=None)
@@ -94,8 +99,9 @@ class MixData(Base):
     md_dozevol_7 = Column("md_dozevol_7", Float, default=None)
     md_dozevol_8 = Column("md_dozevol_8", Float, default=None)
     md_dozevol_9 = Column("md_dozevol_9", Float, default=None)
-
+#-----------------------
     md_Dosername_0 = Column("md_Dosername_0", String(20), default=None)
+    "имена дозаторов с питательным веществом"
     md_Dosername_1 = Column("md_Dosername_1", String(20), default=None)
     md_Dosername_2 = Column("md_Dosername_2", String(20), default=None)
     md_Dosername_3 = Column("md_Dosername_3", String(20), default=None)
@@ -266,7 +272,7 @@ class MixData(Base):
 # url_object = URL.create(
 #             "mysql+pymysql",
 #             username="scadauser",
-#             password="3a8AWur6H2",  # plain (unescaped) text
+#             password="pass",  # plain (unescaped) text
 #             host="10.10.0.251",
 #             database="testdemo",
 #         )

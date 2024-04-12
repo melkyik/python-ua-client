@@ -634,6 +634,9 @@ class FarmPLC:
                                 mess=f"<b>{row.farm}</b> зона <b>{row.zonename}</b> \nЗамес в <i>{str(row.end_mix)}</i> : \n {f'{buf[0]} 'if buf[0]!='' else ''}{buf[1] if buf[1]!='' else ''}  "
                                 mylogger.warn(mess)
                                 send_to_bot(mess)
+                                 
+                                 
+                            # продолжение после проверки порогов
 
                             session.add(row) # после этой строки экземпляр row недоступен
                             session.commit()

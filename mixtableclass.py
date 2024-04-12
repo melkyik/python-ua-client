@@ -260,11 +260,11 @@ class MixData(Base):
         self.md_pHmix = md_pHmix
         self.md_ECmix = md_ECmix
 
-        self.md_Volume=md_Volume,
-        self.md_ECWater=md_ECWater,
-        self.md_K_correct =md_K_correct,
-        self.md_ECTank=md_ECTank,
-        self.rd_ECStart=rd_ECStart,
+        self.md_Volume=md_Volume
+        self.md_ECWater=md_ECWater
+        self.md_K_correct =md_K_correct
+        self.md_ECTank=md_ECTank
+        self.rd_ECStart=rd_ECStart
 
     def __repr__(self):
         return f"{self.id} start={self.start_mix}, end={self.end_mix}"

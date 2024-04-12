@@ -200,6 +200,27 @@ def getgraphdata(farmname,zone)->Tuple[pd.DataFrame,pd.DataFrame,float]:
             dfp['ts'] = pd.to_datetime(dfp['ts'])
             return df,dfp,angle
 #=========================================================
+'''
+
+def getmixtrend(farmname,zone)->Tuple[pd.DataFrame,pd.DataFrame,float]:
+    "ЗАГРУЗКА ПОСЛЕДНИХ 5 замесов"
+    if farmname in st.session_state['farmconf']:
+        fc=st.session_state['farmconf'][farmname]
+        url_object = URL.create(
+        "mysql+pymysql",
+        username=fc["scada"]['dbuser'],
+        password=fc["scada"]['dbpass'], 
+        host    =fc["scada"]['dbhost'],
+        database=fc["scada"]['dbname'],
+        )
+
+        engine= create_engine(url_object,echo=True)
+        with engine.connect() as conn, conn.begin():  
+            df = pd.read_sql_query(f"SELECT md_ECTank FROM mixdata WHERE farm=`{farmname}` AND zone={zone} ORDER BY `end_mix` DESC LIMIT 5", conn) 
+
+            return df
+#=========================================================
+'''
 #ЗАГРУЗКА ДАННЫХ ЛОГА ЗАМЕСА
 @st.cache_data
 def getlogdata(farmname,dt_b,dt_e)->pd.DataFrame:
@@ -283,13 +304,14 @@ if  st.session_state["authentication_status"]:
             doser_names.append(dfi[f"md_Dosername_{c}"][i]if dfi[f"md_Dosername_{c}"][i] not in doser_names  else f"Doser {c}")
             dozezone.append(dfi[f"rd_DoseZone_{c-1}"][i])
             ecafter.append(dfi[f"rd_EC_After_{c-1}"][i])
-            ecafter2.append(fl(dfi[f"rd_EC_After_{c-1}"][i]))#для определения максимума
+           # ecafter2.append(fl(dfi[f"rd_EC_After_{c-1}"][i]))#для определения максимума
             dosevol.append(dfi[f"md_dozevol_{c}"][i])
             ecr.append(dfi[f"md_ECr_{c}"][i])
         list_of_tuples = list(zip(dozezone,ecafter,dosevol,ecr))#обьединение списков в столбцы таблички
         df = pd.DataFrame(list_of_tuples).transpose()#повернуть таблицу тк она заполнена по вертикали а надо по горизонтали
         df.columns=doser_names
-        maxec=max(ecafter2)#тут находим максимум списка данных рецепта
+       # maxec=max(ecafter2)#тут находим максимум списка данных рецепта
+        maxec=max(dfi.loc[i:i,'rd_EC_After_0':'rd_EC_After_9'].fillna(0).values[0])
         #КОНФИГУРИРОВАНИЕ ЗАГОЛОВКА данных для ТАБЛИЧКИ
         df["Измерение"]=["Рецепт,мл/л","EC рецепт ms/m3","Обьем удобрений","EC расчитаное"]
         column_config={}
@@ -336,6 +358,14 @@ if  st.session_state["authentication_status"]:
              #вывод графика 
         info_exp.write("График EC за неделю")  
         dfg,dfp,angle=getgraphdata(dfi['farm'][i],dfi['zone'][i])
+        st.dataframe(dfi)
+        #st.dataframe(getmixtrend(dfi['farm'][i],dfi['zone'][i]))
+
+
+        #SELECT md_ECTank FROM mixdata WHERE farm='Berdsk FU1' AND zone=5 ORDER BY end_mix desc LIMIt 4
+        #st.metric('delta_ECTank',f" {max(dfi.loc[i:i,'rd_EC_After_0':'rd_EC_After_9'].fillna(0).values[0])}")
+        #st.metric('delta_ECTank',f" {dfi['md_ECTank'][i]}")
+        #st.metric('delta_ECTank',f" {pc(dfi['md_ECTank'][i], max(dfi.loc[i:i,'rd_EC_After_0':'rd_EC_After_9'].fillna(0).values[0]))}")
     #    #
     #     merged_df = pd.merge(dfp, dfg, on='ts')
     #     info_exp.dataframe(merged_df)

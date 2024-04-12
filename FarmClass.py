@@ -16,9 +16,15 @@ from sqlalchemy import URL,create_engine
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 import os
+from telegram import Bot,Message
+import sys,traceback
 from os.path import join, dirname
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
+def send_to_bot(message)->Message:
+    "посылка сообщения в группу "
+    bot = Bot(token=os.environ.get("BOT_TOKEN"))
+    return bot.send_message(chat_id=os.environ.get("GROUP_ID"),text=message,parse_mode="HTML")
 
 def extract_point_name(s:str)->list:
     """считывает имя точки и парсит его на составляющие - префиксы и имя"""
@@ -453,10 +459,17 @@ class FarmPLC:
             9 : Text := 'Pumpung to zone';
             20 : Text := 'End operation';
     """
+#--------------------------------------------------------  
    
+
    #--------------------------------------------------------  
     async def mix_loop(self):
         """цикл мониторинга замесов на ферме и выдачи лога состояния этих замесов"""
+        def fl(a):
+            try:
+                return float(a)
+            except:
+                return 0
         def to_int(x)->int:
             return 0 if (x is None) or (x=="None") else int(float(x))
         def to_float(x)->float:
@@ -469,6 +482,7 @@ class FarmPLC:
         tanklevel=0
         start_date=None
         EC_tank=0
+
         fluidflag=False
         url_object = URL.create(
                     "mysql+pymysql",
@@ -491,7 +505,7 @@ class FarmPLC:
                 mylogger.info(f"{self.name} autostage ={autostage} old={oldautostage} ")
             
             if (auto==1) and autostat: #автоматический режим активен
-                if ((fluidstage in [5,6,7]) and (oldfluidstage in [2,3,4])) and (fluidcnt>0) and not fluidflag :#or( datetime.now().minute==45 and datetime.now().second==0):
+                if ((fluidstage in [5,6,7]) and (oldfluidstage in [2,3,4])) and (fluidcnt>0) and not fluidflag:#or( datetime.now().minute==7 and datetime.now().second==0):
                     ecwater=to_float(await self.forcereadvalueshort("GVL.Command.Fluid.ECWater"))
                     k_correct=to_float(await self.forcereadvalueshort("GVL.Command.Fluid.K_correct"))
                     tanklevel=to_float(await self.forcereadvalueshort("GVL.Command.Fluid.Level"))
@@ -501,7 +515,7 @@ class FarmPLC:
                 if (oldautostage !=autostage ) and (autostage in [3,4]): #or( datetime.now().minute==47 and datetime.now().second==0): 
                     start_date=plcdate
                     mylogger.info(f"{self.name} - зафиксирован старт замеса в {start_date} в зону {recipe}")
-                if (oldautostage in range(5,9)) and (autostage==9)  :#or( datetime.now().minute==2 and datetime.now().second==0) :  #значит начат залив в зону
+                if (oldautostage in range(5,9)) and (autostage==9)   :#                or( datetime.now().minute==7 and datetime.now().second==0) :  #значит начат залив в зону
                     mylogger.info(f"{self.name} - зафиксирован залив в зону {recipe} в {plcdate}")
                     EC_Measured=to_float(await self.forcereadvalueshort("GVL.Command.Fluid.EC_Measured"))
                     ph_Measured=to_float(await self.forcereadvalueshort("GVL.Command.Fluid.ph_Measured"))
@@ -513,6 +527,7 @@ class FarmPLC:
                             Session=sessionmaker(bind=engine)
                             session=Session()
                             if (start_date=="None") or (start_date is None) :
+                               #start_date=plcdate
                                 raise Exception(f"{self.name} start_date not present")
                             row=MixData(        farm=self.name,
                                                 start_mix=start_date,
@@ -589,10 +604,38 @@ class FarmPLC:
                                                 md_ECmix=None if (EC_Measured=="None") or (EC_Measured is None) else EC_Measured,
                                                 md_pHmix=None if (ph_Measured=="None") or (ph_Measured is None) else ph_Measured,
                                                         )
-                            
+                                 
+                   
 
-                            
-                            session.add(row)
+                        
+                        #проверка на пороговые значения при замесе
+                           
+                            maxec=max([fl(vars(row)[f"rd_EC_After_{c}"]) for c in range(10)])
+                           # mylogger.info(f"{vars(row)['rd_EC_After_1']} maxec {str(maxec)}")
+                            def badpc(a,b,w,h,desc)->str:
+                                    "вспомогательная функция для расчета  дельты в процентах"
+                                    try:
+                                        buf= ((1-b/a)*100) if a!=0 else 0
+                                        if abs(buf)>h:
+                                            return  f"{desc} = <b>{a:.2f}</b> Цель=<b>{b:.2f}</b> <b>:bangbang:Превышено максимальное отклонение!</b> {':arrow_double_up:' if buf>0 else ':arrow_double_down:' }<b>{buf:.2f}% > {h}%</b>"
+                                        if abs(buf)>w:
+                                            return f"{desc} = <b>{a:.2f}</b> Цель=<b>{b:.2f}</b> :warning:Ненормальное отклонение!  {':arrow_double_up:' if buf>0 else ':arrow_double_down:' }<b>{buf:.2f}% >{w}%</b>"
+                                        return ""
+                                    except:
+                                        return f"{desc} Ec warn calc error "
+                                    
+                            buf=[badpc(fl(row.rd_ECStart),maxec,12,15,'EC сохраненый'),
+                                badpc(fl(row.md_ECTank),maxec,12,15,'EC в баке зоны')]
+                                #badpc(fl(row.md_ECmix),fl(row.md_ECTank),12,15,'EC после замеса') ] 
+                            mylogger.info(f"EC_Measured {EC_Measured} ectank{row.md_ECTank}  maxec {maxec} rd_ECStart {row.rd_ECStart}")
+                            mylogger.info(str(buf))
+                            if not all(element == "" for element in buf):
+                          
+                                mess=f"<b>{row.farm}</b> зона <b>{row.zonename}</b> \nЗамес в <i>{str(row.end_mix)}</i> : \n {f'{buf[0]} 'if buf[0]!='' else ''}{buf[1] if buf[1]!='' else ''}  "
+                                mylogger.warn(mess)
+                                send_to_bot(mess)
+
+                            session.add(row) # после этой строки экземпляр row недоступен
                             session.commit()
                             session.close()
                             mylogger.info(f"{self.name} row added ")
@@ -603,8 +646,10 @@ class FarmPLC:
                             raise  Exception(f"{self.name} error recipe={recipe} или статус точки - неисправность")   
                              
                     except Exception as error:
+                       # exc_type, exc_value, exc_traceback = sys.exc_info()
+                       # line_num = traceback.tb_lineno(exc_traceback)
                         fluidflag=False
-                        mylogger.error(error)
+                        mylogger.error(f"{error}")
             oldautostage=autostage
             oldfluidstage=fluidstage
             await asyncio.sleep(1)

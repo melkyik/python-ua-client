@@ -7,10 +7,9 @@ import yaml
 from yaml.loader import SafeLoader
 import streamlit_authenticator as stauth
 import numpy as np
-#from bokeh.plotting import figure
-#from bokeh.models import ColumnDataSource
-#from bokeh.layouts import gridplot
-
+import matplotlib.pyplot as plt
+import plotly.express as px
+from plotly import graph_objects as go
 import datetime 
 import os
 import json
@@ -94,6 +93,9 @@ def getconfig()->dict:
 
 st.session_state["farmconf"]=getconfig() 
 #st.write(st.session_state["farmconf"])
+
+
+
 #=========================================================
 #РАБОТА СО ВРЕМЕНЕМ
 #tzone=ZoneInfo('Asia/Novosibirsk')
@@ -102,18 +104,30 @@ if 'timezone' not in st.session_state:
 today = datetime.datetime.now(tz=ZoneInfo('Asia/Novosibirsk'))
 yesterday= today+datetime.timedelta(days=-1)
 
-
+#=========================================================
+#доп функции
 @st.cache_data
 def get_timezones():
     return available_timezones()
+
+def extzcnv(t:Timestamp,fr="UTC",to="Asia/Novosibirsk")->Timestamp:
+        #cперва локализует время в fr затем пеерводит в целевой часовой пояс
+        buf:Timestamp=t.tz_localize(ZoneInfo(fr)).tz_convert(ZoneInfo(to))
+        return buf
 
 def tzcnv(t:Timestamp):
         #cперва локализует время в utc затем пеерводит в целевой часовой пояс
         buf:Timestamp=t.tz_localize(ZoneInfo("UTC")).tz_convert(ZoneInfo(st.session_state["timezone"]))
         return buf.strftime('%Y-%m-%d %X')
-def tzchange():
-    global tzone
-    tzone=ZoneInfo(st.session_state["timezone"])
+
+    
+def pc(a,b,com:str=""):
+    "вспомогательная функция для вывода дельты в процентах"
+    try:
+        buf="{:.2%} ".format(1-b/a)+com
+        return buf
+    except:
+        return None 
 
 def datetupleconvert(dat)->list:
     if type(dat)==tuple:
@@ -169,7 +183,7 @@ def datechange(dat:tuple)->pd.DataFrame:
 from typing import Tuple
 @st.cache_data
 def getgraphdata(farmname,zone)->Tuple[pd.DataFrame,pd.DataFrame,float]:
-    "ЗАГРУЗКА ГРАФИКА ЗОНЫ"
+    "ЗАГРУЗКА ГРАФИКА ЗОНЫ время графиков - МЕСТНОЕ"
     if farmname in st.session_state['farmconf']:
         fc=st.session_state['farmconf'][farmname]
         url_object = URL.create(
@@ -189,42 +203,84 @@ def getgraphdata(farmname,zone)->Tuple[pd.DataFrame,pd.DataFrame,float]:
             df = pd.read_sql_query(f"SELECT `Timestamp` as ts ,`Value`as val FROM trends_hour where `id` = {fc['ECGraph'][str(zone)]} and quality=1 and `Timestamp` BETWEEN '{dt_b}' AND '{dt_e}'", conn) 
             df3days= pd.read_sql_query(f"SELECT `Timestamp` as ts ,`Value`as val FROM trends_hour where `id` = {fc['ECGraph'][str(zone)]} and quality=1 and `Timestamp` BETWEEN '{dt_b3}' AND '{dt_e3}'", conn) 
             df3days['ts'] = pd.to_numeric(df3days['ts'])
-            coefficients = np.polyfit(df3days['ts'], df3days['val'], 1)
-            poly = np.poly1d(coefficients)
-            derivative = np.polyder(poly)
-            dfp=pd.DataFrame({"ts":df['ts'],
-                              "val":poly(pd.to_numeric(df['ts']))})
-            angle=np.rad2deg(np.arctan(derivative(0)))
-            #angle=derivative(0)
-            #angle=coefficients
-            dfp['ts'] = pd.to_datetime(dfp['ts'])
+            dfp=None
+            angle=0
+            if len(df3days['ts'])>0:
+                coefficients = np.polyfit(df3days['ts'], df3days['val'], 1) 
+                poly = np.poly1d(coefficients)
+                derivative = np.polyder(poly)
+                dfp=pd.DataFrame({"ts":df['ts'],
+                                "val":poly(pd.to_numeric(df['ts']))})
+                angle=np.rad2deg(np.arctan(derivative(0)))
+                #angle=derivative(0)
+                #angle=coefficients
+                dfp['ts'] = pd.to_datetime(dfp['ts'])
             return df,dfp,angle
 #=========================================================
-'''
 
-def getmixtrend(farmname,zone)->Tuple[pd.DataFrame,pd.DataFrame,float]:
-    "ЗАГРУЗКА ПОСЛЕДНИХ 5 замесов"
-    if farmname in st.session_state['farmconf']:
-        fc=st.session_state['farmconf'][farmname]
-        url_object = URL.create(
-        "mysql+pymysql",
-        username=fc["scada"]['dbuser'],
-        password=fc["scada"]['dbpass'], 
-        host    =fc["scada"]['dbhost'],
-        database=fc["scada"]['dbname'],
-        )
-
-        engine= create_engine(url_object,echo=True)
-        with engine.connect() as conn, conn.begin():  
-            df = pd.read_sql_query(f"SELECT md_ECTank FROM mixdata WHERE farm=`{farmname}` AND zone={zone} ORDER BY `end_mix` DESC LIMIT 5", conn) 
-
-            return df
+def getmixesforweek(farmname,zone)->pd.DataFrame:
+    "ВЫВОД ЗАМЕСОВ ЗА НЕДЕЛЮ время замесов в базе - UTC"
+    url_object = URL.create(
+                "mysql+pymysql",
+                username=os.environ.get("MIXDB_USER"),
+                password=os.environ.get("MIXDB_PASSWORD"),  # plain (unescaped) text
+                host=os.environ.get("MIXDB_HOST"),
+                database=os.environ.get("MIXDB_BASE"),
+            )
+    engine= create_engine(url_object,echo=True)
+    weekago= today+datetime.timedelta(days=-7)
+    dt_b,dt_e=datetupleconvert(tuple([weekago,today]))
+   
+    
+    with engine.connect() as conn, conn.begin():   
+        q=f"SELECT start_mix,end_mix,md_ECmix FROM mixdata WHERE farm='{farmname}' AND zone={zone} and start_mix BETWEEN '{dt_b}' AND '{dt_e}' "
+        #st.write(q)
+        df=pd.read_sql_query(q, conn) 
+        df['start_mix'] = df['start_mix'].apply(lambda x: extzcnv(x,to=st.session_state["timezone"]))
+        df['end_mix'] = df['end_mix'].apply(lambda x: extzcnv(x,to=st.session_state["timezone"]))
+        return df
 #=========================================================
-'''
+@st.cache_data
+def getmixtrend(farmname,zone,n)->Tuple[pd.DataFrame,pd.DataFrame,float]:
+    "РАССЧЕТ ТРЕНДА время тренда в базе UTC"
+    url_object = URL.create(
+                "mysql+pymysql",
+                username=os.environ.get("MIXDB_USER"),
+                password=os.environ.get("MIXDB_PASSWORD"),  # plain (unescaped) text
+                host=os.environ.get("MIXDB_HOST"),
+                database=os.environ.get("MIXDB_BASE"),
+            )
+    engine= create_engine(url_object,echo=True)
+
+    with engine.connect() as conn, conn.begin():   
+        df = pd.read_sql_query(f"SELECT md_ECTank FROM mixdata WHERE farm='{farmname}' AND zone={zone} ORDER BY end_mix DESC LIMIT {n}", conn) 
+        df_inverted = df[::-1].reset_index(drop=True)
+        x = df_inverted.index.values
+        y = df_inverted.md_ECTank.values
+        coefficients = np.polyfit(x,y,1)
+        poly = np.poly1d(coefficients)
+        derivative = np.polyder(poly)
+        derivative_values = derivative(0)
+        res = round(np.rad2deg(np.arctan(derivative_values)),3)
+        df_inverted["poly"]=poly(x)
+        if res < 0:
+            trend = f"Значение EC снижается на последних {n} замесах, угол наклона = {res}"
+        else:
+            trend = f"Значение EC увеличивается на последних {n} замесах, угол наклона = {res}"
+        
+        #нужно уточнить параметр при котором аларм должен происходит ь 
+        if res > 10:
+            alarm = True
+        else:
+            alarm = False
+            
+        return trend, df_inverted, alarm
+#=========================================================
 #ЗАГРУЗКА ДАННЫХ ЛОГА ЗАМЕСА
+#
 @st.cache_data
 def getlogdata(farmname,dt_b,dt_e)->pd.DataFrame:
-    "ЗАГРУЗКА лога"
+    "ЗАГРУЗКА лога время лога в базе МЕСТНОЕ"
     if farmname in st.session_state['farmconf']:
         fc=st.session_state['farmconf'][farmname]
         url_object = URL.create(
@@ -239,13 +295,7 @@ def getlogdata(farmname,dt_b,dt_e)->pd.DataFrame:
     with engine.connect() as conn, conn.begin():  
         df = pd.read_sql_query(f"SELECT `Timestamp` AS TIME , TEXT AS message  from messages_data where {fc['logfilter']} AND `Timestamp`  BETWEEN '{dt_b}' AND '{dt_e}' ORDER BY TIME desc ", conn)  
         return df
-def pc(a,b,com:str=""):
-    "вспомогательная функция для вывода дельты в процентах"
-    try:
-        buf="{:.2%} ".format(1-b/a)+com
-        return buf
-    except:
-        return None 
+    
 
 #def main():
 #=========================================================
@@ -294,7 +344,6 @@ if  st.session_state["authentication_status"]:
         doser_names=["Измерение"]
         dozezone=[""]
         ecafter=[""]
-        ecafter2=[]
         dosevol=[""]
         ecr=[""]
         df=pd.DataFrame()
@@ -304,7 +353,6 @@ if  st.session_state["authentication_status"]:
             doser_names.append(dfi[f"md_Dosername_{c}"][i]if dfi[f"md_Dosername_{c}"][i] not in doser_names  else f"Doser {c}")
             dozezone.append(dfi[f"rd_DoseZone_{c-1}"][i])
             ecafter.append(dfi[f"rd_EC_After_{c-1}"][i])
-           # ecafter2.append(fl(dfi[f"rd_EC_After_{c-1}"][i]))#для определения максимума
             dosevol.append(dfi[f"md_dozevol_{c}"][i])
             ecr.append(dfi[f"md_ECr_{c}"][i])
         list_of_tuples = list(zip(dozezone,ecafter,dosevol,ecr))#обьединение списков в столбцы таблички
@@ -328,12 +376,8 @@ if  st.session_state["authentication_status"]:
         info_exp.text(f"Старт замеса {tzcnv(dfi['start_mix'][i])} залив в зону {tzcnv(dfi['end_mix'][i])} итого {delta.seconds // 3600 }ч {(delta.seconds % 3600)//60}м {(delta.seconds % 60)}сек"  )
         #рендер подготовленой таблички
         t=info_exp.dataframe(df,column_config=column_config,hide_index=True)
-    # info_exp.header("Параметры замеса")
+
         #рендер трех столбцов с measurments
-    
-
-
-
         col=   info_exp.columns(4)
         with col[0]:
             col[0].metric(f"Обьем замеса ", f"{dfi['md_Volume'][i]} л.")
@@ -355,38 +399,21 @@ if  st.session_state["authentication_status"]:
                 col[3].metric(f"корректировочный множитель kEC ",f"{dfi['rd_KEC'][i]}")
                 col[3].metric(f"корректировочный KpH",dfi['rd_KpH'][i])  
     
-             #вывод графика 
-        info_exp.write("График EC за неделю")  
+
         dfg,dfp,angle=getgraphdata(dfi['farm'][i],dfi['zone'][i])
-        st.dataframe(dfi)
-        #st.dataframe(getmixtrend(dfi['farm'][i],dfi['zone'][i]))
+        dfmixweek= getmixesforweek(dfi['farm'][i],dfi['zone'][i])
 
-
-        #SELECT md_ECTank FROM mixdata WHERE farm='Berdsk FU1' AND zone=5 ORDER BY end_mix desc LIMIt 4
-        #st.metric('delta_ECTank',f" {max(dfi.loc[i:i,'rd_EC_After_0':'rd_EC_After_9'].fillna(0).values[0])}")
-        #st.metric('delta_ECTank',f" {dfi['md_ECTank'][i]}")
-        #st.metric('delta_ECTank',f" {pc(dfi['md_ECTank'][i], max(dfi.loc[i:i,'rd_EC_After_0':'rd_EC_After_9'].fillna(0).values[0]))}")
-    #    #
-    #     merged_df = pd.merge(dfp, dfg, on='ts')
-    #     info_exp.dataframe(merged_df)
-    #     source1 = ColumnDataSource(data=dict(x=merged_df['ts'], y=merged_df['val_x']))
-    #     source2 = ColumnDataSource(data=dict(x=merged_df['ts'], y=merged_df['val_y']))
-    #     p1= figure(
-    #                         title='Недельный график',
-    #                         x_axis_label='time',
-    #                         y_axis_label='EC')
-
-    #     p1.line(x='x', y='y', source=source1, line_width=2, legend_label='EC')
-    #     p2= figure(
-    #                         title='полином',
-    #                         x_axis_label='time',
-    #                         y_axis_label='EC')
-
-    #     p2.line(x='x', y='y', source=source2, line_width=2, color='red', legend_label='poly')
-    #     plots = gridplot([[p1], [p2]], sizing_mode='stretch_both')
-
-    #     info_exp.bokeh_chart(plots) """
-        info_exp.line_chart(data=dfg,x='ts',y='val',)
+        #!!!!!!!вывод графика
+        #info_exp.line_chart(data=dfg,x='ts',y='val',)
+        fig = px.line(dfg, x='ts', y='val', title='График EC с контрольной линией', labels={'ts': 'Timestamp', 'val': 'EC'})
+        fig.add_hline(y=maxec, line_dash="dot", line_color="red", annotation_text=f"Contol EC: {maxec}", annotation_position="bottom left")
+        fig.add_trace(go.Scatter(x=dfmixweek['start_mix'], y=dfmixweek['md_ECmix'], mode='markers', marker=dict(color='red', size=8), name='Старт замеса'))
+        fig.add_trace(go.Scatter(x=dfmixweek['end_mix'], y=dfmixweek['md_ECmix'], mode='markers', marker=dict(color='green', size=8), name='Конац замеса'))
+        fig.update_yaxes(range=[None, 3.5])  
+     
+        info_exp.plotly_chart(fig,use_container_width=True)
+        #info_exp.write(f"тест")
+       # info_exp.dataframe(dfmixweek)
        # info_exp.line_chart(data=dfp,x='ts',y='val',)
         info_exp.write(f"Угол наклона графика за последние 3 дня {angle}")
         #info_exp.line_chart(data=merged_df,x='ts',y='val')  # val_x и val_y - значения из dfg и dfg3 соответственно
@@ -395,6 +422,22 @@ if  st.session_state["authentication_status"]:
         info_exp.write("Лог замеса") 
         info_exp.data_editor(dfl,hide_index=True,width=800)
         
+
+
+        ##########################################
+        #ввывод данных с димой анохиным
+        trend_message, data_trend, trend_alarm = getmixtrend(dfi['farm'][i],dfi['zone'][i], 3)
+        st.write(trend_message)
+        st.dataframe(data_trend)
+        #st.write("Графики данных и их производной:")
+        # Строим график с помощью plotly.express
+        fig = px.line(data_trend, x=data_trend.index, y=['md_ECTank', 'poly'], title='График последних трех замесов и их производной')
+        fig.add_hline(y=maxec, line_dash="dot", line_color="red", annotation_text=f"Contol EC: {maxec}", annotation_position="bottom right")
+        fig.update_yaxes(range=[None, 3.5])  
+        fig.update_traces(mode="lines+markers")
+
+        # Отобразим график через st.plotly_chart
+        st.plotly_chart(fig, use_container_width=True)
     if st.session_state["authentication_status"] and not df is None:                    
         dfi=df.query("farm==@farms & zonename==@zones")
 

@@ -17,14 +17,16 @@ from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 import os
 from telegram import Bot,Message
-import sys,traceback
+from alarms_handles import send_to_bot, getlastmixes,make_graph
 from os.path import join, dirname
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
-def send_to_bot(message)->Message:
-    "посылка сообщения в группу "
-    bot = Bot(token=os.environ.get("BOT_TOKEN"))
-    return bot.send_message(chat_id=os.environ.get("GROUP_ID"),text=message,parse_mode="HTML")
+
+
+# def send_to_bot(message)->Message:
+#     "посылка сообщения в группу "
+#     bot = Bot(token=os.environ.get("BOT_TOKEN"))
+#     return bot.send_message(chat_id=os.environ.get("GROUP_ID"),text=message,parse_mode="HTML")
 
 def extract_point_name(s:str)->list:
     """считывает имя точки и парсит его на составляющие - префиксы и имя"""
@@ -159,7 +161,7 @@ class FarmPLC:
     "фильтр таблицы message_log"
     zonenames={}
     "сопоставление имен зон"
-
+    timezone="UTC"
     
     def __init__(self,jconf:dict={ "id":"1",
       "name":"PLC default",
@@ -501,8 +503,8 @@ class FarmPLC:
             fluidcnt=to_int(self.getValueShort("GVL.Command.Fluid.cnt"))
             
 
-            if oldautostage!=autostage:
-                mylogger.info(f"{self.name} autostage ={autostage} old={oldautostage} ")
+            #if oldautostage!=autostage:
+            #    mylogger.info(f"{self.name} autostage ={autostage} old={oldautostage} ")
             
             if (auto==1) and autostat: #автоматический режим активен
                 if ((fluidstage in [5,6,7]) and (oldfluidstage in [2,3,4])) and (fluidcnt>0) and not fluidflag:#or( datetime.now().minute==7 and datetime.now().second==0):
@@ -510,7 +512,7 @@ class FarmPLC:
                     k_correct=to_float(await self.forcereadvalueshort("GVL.Command.Fluid.K_correct"))
                     tanklevel=to_float(await self.forcereadvalueshort("GVL.Command.Fluid.Level"))
                     EC_tank = to_float(self.getPointByName(f'ECtank.{recipe}').value if self.getPointByName(f'ECtank.{recipe}') else None)
-                    mylogger.info(f"{self.name} - ECwater = {ecwater}, tanklevel={tanklevel} ectank={EC_tank} k_correct={k_correct}")
+                    mylogger.info(f"{self.name} - ECwater = {ecwater:.2f}, tanklevel={tanklevel:.2f} ectank={EC_tank:.2f} k_correct={k_correct:.2f}")
                     fluidflag=True
                 if (oldautostage !=autostage ) and (autostage in [3,4]): #or( datetime.now().minute==47 and datetime.now().second==0): 
                     start_date=plcdate
@@ -615,25 +617,30 @@ class FarmPLC:
                             def badpc(a,b,w,h,desc)->str:
                                     "вспомогательная функция для расчета  дельты в процентах"
                                     try:
+                                        if row.rd_nCycle ==0 : #не учитываем нулевые замесы
+                                           return "" 
                                         buf= ((1-b/a)*100) if a!=0 else 0
                                         if abs(buf)>h:
-                                            return  f"{desc} = <b>{a:.2f}</b> Цель=<b>{b:.2f}</b> <b>:bangbang:Превышено максимальное отклонение!</b> {':arrow_double_up:' if buf>0 else ':arrow_double_down:' }<b>{buf:.2f}% > {h}%</b>"
+                                            return  f"\n{desc} = <b>{a:.2f}</b> Цель=<b>{b:.2f}</b><b>‼️Превышено максимальное отклонение!</b> {'⏫' if buf>0 else '⏬' }<b>{buf:.2f}% > {h}%</b>"
                                         if abs(buf)>w:
-                                            return f"{desc} = <b>{a:.2f}</b> Цель=<b>{b:.2f}</b> :warning:Ненормальное отклонение!  {':arrow_double_up:' if buf>0 else ':arrow_double_down:' }<b>{buf:.2f}% >{w}%</b>"
+                                            return f"\n{desc} = <b>{a:.2f}</b> Цель=<b>{b:.2f}</b>⚠️Ненормальное отклонение!  {'⏫' if buf>0 else '⏬' }<b>{buf:.2f}% >{w}%</b>"
                                         return ""
                                     except:
                                         return f"{desc} Ec warn calc error "
                                     
-                            buf=[badpc(fl(row.rd_ECStart),maxec,12,15,'EC сохраненый'),
-                                badpc(fl(row.md_ECTank),maxec,12,15,'EC в баке зоны')]
+                            buf=[
+                                #badpc(fl(row.rd_ECStart),maxec,12,15,'EC сохраненый'),
+                                badpc(fl(row.md_ECTank),maxec,12,15,'EC в баке зоны'),'']
                                 #badpc(fl(row.md_ECmix),fl(row.md_ECTank),12,15,'EC после замеса') ] 
-                            mylogger.info(f"EC_Measured {EC_Measured} ectank{row.md_ECTank}  maxec {maxec} rd_ECStart {row.rd_ECStart}")
+                            mylogger.info(f"EC_Measured {EC_Measured:.2f} ectank{row.md_ECTank:.2f}  maxec {maxec:.2f} rd_ECStart {row.rd_ECStart:.2f}")
                             mylogger.info(str(buf))
-                            if not all(element == "" for element in buf):
+                            if not all(element == "" for element in buf) :
                           
-                                mess=f"<b>{row.farm}</b> зона <b>{row.zonename}</b> \nЗамес в <i>{str(row.end_mix)}</i> : \n {f'{buf[0]} 'if buf[0]!='' else ''}{buf[1] if buf[1]!='' else ''}  "
+                                mess=f"<b>{row.farm}</b> зона <b>{row.zonename}</b> \nЗамес {row.rd_nCycle} из {row.rd_Cycle} {row.md_Volume:.1f}л.\nВ <i>{str(row.end_mix)}</i> :\n{f'{buf[0]} 'if buf[0]!='' else ''}{buf[1] if buf[1]!='' else ''}  "
+                               
                                 mylogger.warn(mess)
-                                send_to_bot(mess)
+                                if row.farm !="Riyadh FU1": 
+                                    send_to_bot(mess,make_graph(row.farm,row.zonename,maxec,5,tz=self.timezone))
                                  
                                  
                             # продолжение после проверки порогов
@@ -703,61 +710,6 @@ class FarmPLC:
     def get_filtered_list_of_names(self, search_string: str = "") -> list[str]:
         "возвращает имена точек по фильтру"
         return [self.Value[p].name for p in self.Value if search_string in self.Value[p].name] 
- ##
- #класс со списком ферм для удобства поиска и обращения в списке
- # 
- # 
- #                
-# class  FarmList_: 
-#     """класс со списком ферм для удобства поиска и обращения в списке"""
-#     def __init__(self,desc:str) -> None:
-#         self.farms:dict[str,FarmPLC]={}
-#         self.desc=str(desc)
-
-#     def __str__(self) -> str:
-#         return self.desc + str(len(self.farms))
-#     def get(self,id)-> FarmPLC:
-#         """возвращает ферму по ее id"""
-#         return self.farms.get(str(id))
-       
-          
-#     def add(self,jconf:dict={ "id":"1",
-#       "name":"PLC default",
-#       "URL":"opc.tcp://10.10.2.244:4840",
-#       "login":"admin",
-#       "password":"wago",
-#       "prefix":"ns=4;s=",
-#       "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application."
-#       }):
-#       """добавляет ферму в список на ввводе нужно указать
-#       jconf:dict={ "id":"1",
-#       "name":"PLC default",
-#       "URL":"opc.tcp://10.10.2.244:4840",
-#       "login":"admin",
-#       "password":"wago",
-#       "prefix":"ns=4;s=",
-#       "retprefix":"|var|WAGO 750-8212 PFC200 G2 2ETH RS.Application." """
-#       self.farms[jconf["id"]] = FarmPLC(jconf)
-
-
-#     def get_by_name(self,name:str)->FarmPLC:
-#         """производит поиск и возвращает экземпляр FarmPLC по имени name """
-#         try:
-#             for k in self.farms:
-#                 if self.get(k).name == name:
-#                     return self.get(k)
-#             mylogger.warning("%s Farm isnt found! in list %s",name,self.desc)
-#         except (KeyError) as error:
-#                 mylogger.warning("get_by_name keyerror!  in list %s - %s",self.desc,error)
-#                 return None    
-
-                
-#     def generate_trends(self)->str:
-#         buf=''
-#         for k in self.farms:
-#             for i in self.get(k).Value:
-#                 buf+=self.get(k).getTagByShort(i).get_sql_string()
-#         return buf
 
 class FarmList(dict[str,FarmPLC]):
    #def __init__(self, *args, **kwargs):            

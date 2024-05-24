@@ -174,7 +174,7 @@ def setup2():
             
 
             try:  
-                mylogger.info(f"Ферма {k['farmname']} FU{fucnt} {len(points)} точек")
+                mylogger.info(f"Ферма {k['farmname']} FU{fucnt} {k['timezone']} {len(points)} точек")
                 if points!=[]:
                     i+=1
                     farms.add(   #вызов конструктора фермы с необходимыми данными для подключения
@@ -187,7 +187,7 @@ def setup2():
                     "retprefix":f"{extract_point_name(points[0])[1] if points !=[] else ''}" #с 1 точки заберем префиксы для этого точки читаются выше
                     }
                     )
-                    
+                    farms.get(i).timezone=k['timezone']
                     farms.get(i).bd_logfilter=tempfu.get("logfilter") if tempfu.get("logfilter") else None
                     farms.get(i).zonenames=copy.deepcopy(tempfu.get("zonenames"))
                     
@@ -230,8 +230,6 @@ def setup2():
         9 : Text := 'Pumpung to zone';
         20 : Text := 'End operation';
 """
-
-
 
 
 
